@@ -1,0 +1,99 @@
+# ===========================
+# QuickHyr Voice Backend - Git Ignore
+# ===========================
+
+# --------------------------
+# Python
+# --------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --------------------------
+# Virtual Environment
+# --------------------------
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# --------------------------
+# Environment Variables
+# --------------------------
+.env
+.env.local
+.env.*.local
+
+# --------------------------
+# Google Cloud Credentials
+# --------------------------
+*.json
+!package.json
+!tsconfig.json
+!.vscode/*.json
+
+# --------------------------
+# IDE
+# --------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --------------------------
+# OS Files
+# --------------------------
+.DS_Store
+Thumbs.db
+*.log
+
+# --------------------------
+# Database
+# --------------------------
+*.db
+*.sqlite
+*.sqlite3
+instance/
+
+# --------------------------
+# Testing
+# --------------------------
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --------------------------
+# Audio Files
+# --------------------------
+*.wav
+*.mp3
+*.ogg
+*.flac
+audio_cache/
+
+# --------------------------
+# Misc
+# --------------------------
+*.bak
+*.tmp
+*.temp

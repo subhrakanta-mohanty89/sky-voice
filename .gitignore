@@ -1,0 +1,61 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Environment & secrets (NEVER commit)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development.local
+
+# GCP / service-account credentials
+quickhyr-*.json
+service-account*.json
+*-service-account.json
+gcp-key*.json
+
+# Other secrets
+*.pem
+*.key
+*.p12
+
+# Node
+node_modules/
+dist/
+.next/
+
+# Build artefacts
+frontend-exe/build/
+frontend-exe/dist/
+frontend-exe/.venv/
+backend/instance/
+backend_new/instance/
+*.db
+*.sqlite
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Android build
+mobile-rn/android/build/
+mobile-rn/android/app/build/
+mobile-rn/.gradle/
+
+# Test coverage
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/

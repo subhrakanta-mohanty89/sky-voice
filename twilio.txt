@@ -1,0 +1,2547 @@
+================================================================================
+ TWILIO PROGRAMMABLE VOICE — SIP DOCUMENTATION REFERENCE
+================================================================================
+ Compiled from https://www.twilio.com/docs/voice/sip and related pages
+ Last fetched: 2026-06-09
+ Use this file as a single-source reference for building voice/SIP features
+ with Twilio (e.g. in a call-center / AI voice agent application).
+================================================================================
+
+
+TABLE OF CONTENTS
+-----------------
+ PART A — Programmable Voice + SIP Concepts
+  1. Programmable Voice (overview)
+  2. SIP — Overview & how Twilio uses it
+  3. SIP Quickstart (CLI + Serverless template)
+  4. Use SIP with Twilio Voice (full feature list, glossary, limits)
+  5. Inbound — Sending SIP to Twilio
+  6. Outbound — Receiving SIP from Twilio
+  7. SIP Registration (REGISTER, AOR, limits)
+  8. Secure Media (SRTP / TLS)
+  9. Inbound SIP REFER to Twilio (blind call transfer)
+ 10. Making SIP Calls via REST API
+ 11. TwiML <Sip> noun (attributes, examples)
+ 12. Emergency Calling (911/933/999/112) for SIP Interfaces
+ 13. Quick Glossary
+ 14. Limits Summary
+ 15. Key URLs & Reference Links
+
+ PART B — SIP REST API Reference (full CRUD for every resource)
+ Source: https://www.twilio.com/docs/voice/sip/api
+ 16. SIP API — Resource Map & Base URL
+ 17. SIP Domain Resource (SDxxx)
+ 18. SIP IpAccessControlList Resource (ALxxx)
+ 19. SIP IpAddress Resource (IPxxx)
+ 20. SIP CredentialList Resource (CLxxx)
+ 21. SIP Credential Resource (CRxxx)
+ 22. SIP CredentialListMapping Resource (Calls auth)
+ 23. SIP IpAccessControlListMapping Resource (Calls auth)
+ 24. SIP Domain Registration CredentialListMapping Resource
+ 25. Emergency Calling for SIP Interfaces API
+ 26. End-to-end "wire up a SIP Domain" recipe
+
+
+================================================================================
+ 1. PROGRAMMABLE VOICE — OVERVIEW
+================================================================================
+ Source: https://www.twilio.com/docs/voice
+
+With Twilio, you can quickly make and receive voice calls in your application.
+Twilio provides docs, code samples, SDKs, and developer tools you need.
+
+------------------------------------------------------------------
+GETTING STARTED — Minimal Node.js example to place an outbound call
+------------------------------------------------------------------
+  // Download the helper library: https://www.twilio.com/docs/node/install
+  const twilio = require("twilio");
+
+  // Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN as env variables.
+  const accountSid = process.env.TWILIO_ACCOUNT_SID;
+  const authToken  = process.env.TWILIO_AUTH_TOKEN;
+  const client     = twilio(accountSid, authToken);
+
+  async function createCall() {
+    const call = await client.calls.create({
+      from: "+15558675310",
+      to:   "+15017122661",
+      url:  "http://demo.twilio.com/docs/voice.xml",
+    });
+    console.log(call.sid);
+  }
+  createCall();
+
+------------------------------------------------------------------
+MINIMAL FLASK SERVER — Answer an incoming call
+------------------------------------------------------------------
+  from flask import Flask
+  from twilio.twiml.voice_response import VoiceResponse
+  app = Flask(__name__)
+
+  @app.route("/answer", methods=["GET", "POST"])
+  def answer_call():
+      resp = VoiceResponse()
+      resp.say("Twilio's always there when you call!")
+      return str(resp)
+
+  if __name__ == "__main__":
+      app.run()
+
+------------------------------------------------------------------
+BUILD YOUR APP — Common voice tutorials
+------------------------------------------------------------------
+  * Make outgoing voice calls
+  * Respond to incoming calls
+  * Build an Interactive Voice Response (IVR) tree
+  * Add warm transfer for support agents
+  * Retrieve call logs
+
+------------------------------------------------------------------
+ADVANCED FEATURES
+------------------------------------------------------------------
+  * Voice Insights — surface jitter, MOS, latency for QoS monitoring
+  * Modify in-progress calls via the Voice API
+  * Answering Machine Detection
+  * Conversational IVR + Virtual Agent (machine learning / NLU)
+  * Related products: TaskRouter, Twilio Studio (no-code visual builder)
+
+
+================================================================================
+ 2. SIP — OVERVIEW & HOW TWILIO USES IT
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip
+
+Session Initiation Protocol (SIP) is a signaling protocol for initiating,
+terminating and modifying user sessions over an IP network.
+
+------------------------------------------------------------------
+HOW TWILIO USES SIP
+------------------------------------------------------------------
+Using SIP to connect to Twilio gives access to Twilio's global reach and powerful
+automation and scripting functions. You can connect your on-site or virtual
+Private Branch Exchange (PBX) with Twilio's servers.
+
+For information about SIP Trunking with Twilio, see Elastic SIP Trunking:
+  https://www.twilio.com/docs/sip-trunking
+
+------------------------------------------------------------------
+MANAGE SIP DOMAINS IN TWILIO CONSOLE
+------------------------------------------------------------------
+You can create and configure SIP Domains, IP Access Control Lists, and
+Credential Lists in Twilio Console.
+
+VIEW REGISTERED SIP ENDPOINTS
+  On a SIP Domain's details page, you can see all devices registered with the
+  Domain. Each entry shows the contact address, user agent, registration
+  source IP, and expiration time.
+  Path: Voice > SIP domains > select Domain > Registered endpoints tab.
+  Registrations are Region-specific — endpoints only appear in the Region
+  where the SIP Domain is routed.
+
+ENABLE SECURE MEDIA
+  Secure Media enforces SRTP for media on calls to/from the SIP Domain.
+  When enabled, Twilio rejects calls that don't negotiate SRTP.
+  Make sure your SIP clients/SBCs are configured for SRTP before enabling
+  this in production.
+
+RE-ROUTE A SIP DOMAIN TO A DIFFERENT REGION
+  A SIP Domain can exist in multiple Twilio Regions but is only active in one
+  Region at a time.
+  Path: Voice > SIP domains > select Domain > Active region > Change.
+
+------------------------------------------------------------------
+SIP API RESOURCES (REST)
+------------------------------------------------------------------
+  * SIP Credential Resource
+  * SIP CredentialList Resource
+  * SIP CredentialListMapping Resource
+  * SIP Domain Resource
+  * SIP IpAccessControlList Resource
+  * SIP IpAccessControlListMapping Resource
+  * SIP IpAddress Resource
+
+
+================================================================================
+ 3. SIP QUICKSTART
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/quickstart
+
+In this quickstart you create a Twilio SIP Domain, register SIP clients, and
+place inbound/outbound calls through the PSTN. You also get demo users and a
+pre-built IVR that routes calls to extensions. (~20-30 minutes)
+
+------------------------------------------------------------------
+PREREQUISITES
+------------------------------------------------------------------
+  * A Twilio account
+  * A Twilio phone number with Voice capabilities
+  * Node.js >= 14
+  * A SIP softphone (Zoiper or Linphone)
+  * Familiarity with the terminal/CLI
+
+NOTE — What is a softphone?
+  A softphone is a software application that lets you make voice calls over
+  the internet using your computer or mobile device instead of a traditional
+  phone. Softphones connect to SIP servers so you can make and receive calls
+  through your SIP account.
+
+------------------------------------------------------------------
+1) INSTALL THE TWILIO CLI
+------------------------------------------------------------------
+  macOS (Homebrew):
+      brew tap twilio/brew && brew install twilio
+
+------------------------------------------------------------------
+2) INSTALL THE SERVERLESS PLUGIN
+------------------------------------------------------------------
+      twilio plugins:install @twilio-labs/plugin-serverless
+
+------------------------------------------------------------------
+3) CREATE PROJECT FROM SIP-QUICKSTART TEMPLATE
+------------------------------------------------------------------
+      twilio serverless:init acme --template="sip-quickstart"
+      cd acme
+
+The template creates:
+  * Assets: actions.private.js, admin-client.js, admin.css, shared.private.js,
+    statuses.private.js, extensions.private.js, index.html, site.css
+  * Functions: admin/check-status.js, admin/login.js, admin/perform-action.js,
+    extension-menu.js, outbound-calls.js, sip-configuration.js
+  * .env scaffolding (must set APP_NAME, ADMIN_PASSWORD,
+    DEFAULT_SIP_USER_PASSWORD)
+
+------------------------------------------------------------------
+4) DEPLOY THE APPLICATION
+------------------------------------------------------------------
+      twilio serverless:deploy
+  This creates a Service and a development environment, outputting a list of
+  public URLs to functions/assets.
+
+------------------------------------------------------------------
+5) INITIALIZE THE ENVIRONMENT (web admin)
+------------------------------------------------------------------
+  Open https://<your-service-name>.twil.io/admin/index.html
+  Login with default password: `default`
+  Click "Initialize your application for your environment" which creates:
+    * A SIP Domain
+    * Three demo SIP credentials: alice, bob, charlie
+    * A credential list
+    * SIP setup configuration
+
+  Demo extension mapping:
+    Alice   = 100
+    Bob     = 200
+    Charlie = 300
+  All three users share one default password (shown on the admin page).
+
+------------------------------------------------------------------
+6) CONFIGURE A SOFTPHONE
+------------------------------------------------------------------
+  Open Zoiper (or Linphone) and add a new SIP account:
+    Username : alice
+    Password : <shown in admin page, e.g. ThisIs1Password!>
+    Domain   : your-service-name.sip.us1.twilio.com
+    Transport: UDP or TCP
+
+  IMPORTANT — Use the correct SIP Domain format:
+    <your-domain>.sip.us1.twilio.com   (or your regional suffix)
+    NOT <your-service-name>.twil.io     (that is for HTTP, not SIP)
+
+------------------------------------------------------------------
+7) TEST CALLS
+------------------------------------------------------------------
+  OUTBOUND to a mobile (PSTN):
+    Dial any phone number from your softphone.
+    Caller ID is the value set on the admin page.
+
+  INBOUND from a phone:
+    Call your Twilio number → hear IVR → enter extension (100/200/300) →
+    softphone rings → answer.
+
+  SIP-to-SIP (peer-to-peer):
+    Register a second softphone as `bob`.
+    From Alice, dial extension `200` → Bob's softphone rings.
+    Both endpoints must be Registered.
+
+------------------------------------------------------------------
+8) CUSTOMIZE
+------------------------------------------------------------------
+  Change admin password:
+      In .env, set: ADMIN_PASSWORD=<your_secure_password>
+      then: twilio serverless:deploy
+
+  Add SIP users:
+      Edit assets/extensions.private.js (the .private.js suffix prevents
+      public access). Then go to admin/index.html and click the button to
+      create the additional users automatically.
+
+  IVR routing:
+      functions/extension-menu.js uses <Gather numDigits="3"> to read the
+      extension and dial it via SIP.
+
+  Outbound flow:
+      functions/outbound-calls.js is invoked when a SIP device dials out.
+      It places a call to the PSTN using <Dial callerId="...">.
+
+------------------------------------------------------------------
+9) NEXT STEPS
+------------------------------------------------------------------
+  * TwiML Voice: Dial — https://www.twilio.com/docs/voice/twiml/dial
+  * SIP Interface API — https://www.twilio.com/docs/voice/sip/api
+  * Twilio Functions — https://www.twilio.com/docs/serverless/functions-assets/functions
+  * SIP Trunking      — https://www.twilio.com/docs/sip-trunking
+
+
+================================================================================
+ 4. USE SIP WITH TWILIO VOICE — Full feature list
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/sip-interface
+
+Programmable Voice SIP lets you connect your communications infrastructure to
+Twilio and route voice calls to landlines, mobile phones, browsers, mobile apps,
+or any SIP endpoint. You can connect over the public internet or via Twilio's
+Interconnect for a private connection.
+
+------------------------------------------------------------------
+LIMITS
+------------------------------------------------------------------
+  * 100 SIP Domains per Account or Sub Account
+  * IP Access Control Lists (ACLs) limits — see ACL resource docs
+  * Credential Lists limits — see Credential List resource docs
+  * SIP Registration limits — see SIP Registration page
+
+------------------------------------------------------------------
+FEATURES
+------------------------------------------------------------------
+SIP REGISTRATION
+  Endpoints send REGISTER requests to Twilio so they can receive calls
+  irrespective of physical location.
+
+CALL TRANSFERS USING SIP REFER FROM TWILIO
+  Twilio supports initiating SIP REFER from Twilio towards your IP
+  infrastructure via the <Refer> TwiML verb.
+
+SIP CUSTOM HEADERS
+  Send customized headers; see the sending-sip page #sip-custom-headers.
+
+UUI (USER-TO-USER INFORMATION) HEADER
+  Pass contextual information over the SIP call. Works on both
+  sending and receiving SIP calls.
+
+DTMF
+  Twilio supports RFC-2833 for sending and receiving DTMF.
+
+MEDIA CODEC
+  Twilio supports G.711 μ-law (PCMU) and A-law (PCMA). These are the most
+  common carrier codecs, so transcoding is unnecessary.
+
+SECURING SIP TRAFFIC USING TLS
+  TLS provides encryption for SIP signaling.
+  Network devices that talk to Twilio must trust Twilio's TLS Certificate.
+  Twilio uses certificates from a Certificate Authority (CA); you may need
+  additional root certificates.
+
+  Twilio's CA bundle (download):
+    https://docs-resources.prod.twilio.com/documents/ca-bundle-sip.crt
+  Contains:
+    * DigiCert Global Root CA
+    * DigiCert Global Root G2
+    * DigiCert Global Root G3
+
+  TLS requires no further configuration — port 5061 is always active.
+  Calls over TLS produce empty PCAPs when downloaded from the console.
+
+  IMPORTANT — When sending TLS SIP traffic to Twilio, your infrastructure
+  MUST use a next-hop DOMAIN (not next-hop IP). Using an IP causes a 403
+  error that is NOT visible on your Twilio account. Always use:
+      {example}.sip.{edge}.twilio.com
+
+  TLS Specifications:
+    * Supported TLS versions: TLSv1.2
+        (Twilio does NOT support TLSv1.0 or TLSv1.1)
+    * Supported Ciphers:
+        ECDHE-RSA-AES128-GCM-SHA256, ECDHE-RSA-AES128-SHA256,
+        ECDHE-RSA-AES256-GCM-SHA384, ECDHE-RSA-AES256-SHA384,
+        AES128-GCM-SHA256, AES128-SHA256, AES128-SHA,
+        AES256-GCM-SHA384, AES256-SHA256, AES256-SHA
+
+  NOTE — Twilio does NOT support the `sips` URI scheme; use `sip` with
+  `transport=tls` parameter. If you do send `sips`, Twilio rewrites it.
+
+SECURE MEDIA
+  SRTP encrypts media (RTP/RTCP). See section 8 of this doc.
+
+------------------------------------------------------------------
+IP ADDRESSES (FIREWALL ALLOW LIST)
+------------------------------------------------------------------
+Your infrastructure must allow Twilio's signaling and RTP-media IPs and ports
+on the firewall. Use the multi-region ranges to allow Twilio to re-route in
+the event of a network failure.
+
+Full list:
+  https://www.twilio.com/docs/sip-trunking/ip-addresses
+
+------------------------------------------------------------------
+GLOSSARY (CONDENSED — see section 13 for full)
+------------------------------------------------------------------
+  * Communications Infrastructure — IP-PBX, SBC, IP-phones, etc.
+  * SIP Endpoint — IP-phone or soft client with which a user initiates VoIP.
+  * SIP URI — equivalent to a SIP phone number, takes the form:
+      sip:username@SIPDomain
+  * Twilio SIP Domain — takes the form:
+      {example}.sip.{region}.twilio.com
+    where {example} is customer-chosen and {region} is the data center.
+    Initially only `us1`.
+
+
+================================================================================
+ 5. INBOUND — SENDING SIP TO TWILIO
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/sending-sip
+
+------------------------------------------------------------------
+HOW IT WORKS
+------------------------------------------------------------------
+Create a Twilio SIP Domain. A SIP Domain is a custom DNS hostname associated
+with your Twilio account that accepts SIP traffic.
+Anyone making a SIP request to that domain (e.g. sip:alice@example.sip.us1.twilio.com)
+will be routed over the internet to Twilio. Twilio authenticates the request
+and then webhooks to your configured URL, which responds with TwiML.
+
+------------------------------------------------------------------
+STEP 1 — CREATE A TWILIO VOICE SIP DOMAIN/ENDPOINT
+------------------------------------------------------------------
+In Twilio Console: Voice > SIP Domains > Create SIP Domain.
+
+FRIENDLY NAME
+  Any descriptive label, e.g. "MyCompanySF".
+
+SIP URI / DOMAIN NAME
+  Globally-unique SIP Domain used to route SIP traffic to Twilio.
+  Example: sip:alice@example.sip.twilio.com
+  Rules:
+    * Letters, numbers and "-" only
+    * Every account has its Account SID reserved as a domain by default
+    * Creating subdomains requires the parent domain to exist first
+    * Sub-accounts can create subdomains of any domain in the master account
+    * REST API for creating Domains is available
+
+LOCALIZED SIP URIS (pin to a specific Edge Location)
+  {example}.sip.ashburn.twilio.com    (North America Virginia)
+  {example}.sip.umatilla.twilio.com   (North America Oregon)
+  {example}.sip.dublin.twilio.com     (Europe Ireland)
+  {example}.sip.frankfurt.twilio.com  (Europe Frankfurt)
+  {example}.sip.singapore.twilio.com  (Asia Pacific Singapore)
+  {example}.sip.tokyo.twilio.com      (Asia Pacific Tokyo)
+  {example}.sip.sao-paulo.twilio.com  (South America São Paulo)
+  {example}.sip.sydney.twilio.com     (Asia Pacific Sydney)
+
+CALL CONTROL CONFIGURATION (CONFIGURE WITH dropdown)
+The "A CALL COMES IN" section offers multiple options for handling SIP INVITE:
+
+  WEBHOOKS — Specify a URL that returns TwiML. Full control, self-hosted.
+
+  FUNCTIONS — Twilio Serverless Functions handle the SIP call.
+    Console dropdowns: Service → Environment → Function Path.
+    Example Function:
+      exports.handler = function(context, event, callback) {
+        const twiml = new Twilio.twiml.VoiceResponse();
+        const from = event.From;  // SIP URI of caller
+        const to   = event.To;    // SIP URI called
+        twiml.say('Welcome to your SIP-enabled application.');
+        twiml.dial('+14155551234');
+        return callback(null, twiml);
+      };
+
+  TWIML BINS — Twilio-hosted static or lightly-templated TwiML.
+    Example URL:
+      https://twimlets.com/message?Message%5B0%5D=Congratulations!%20You%20just%20made%20your%20first%20call%20with%20Twilio%20SIP.
+
+  STUDIO FLOWS — Visual, no-code call flow builder.
+
+  Choosing the right option:
+    | Type        | Best for                       | Complexity   | Self-hosted     |
+    | Functions   | Most cases, serverless apps    | Low-Medium   | No (Twilio)     |
+    | Webhooks    | Existing web apps, complex     | Medium-High  | Yes (self)      |
+    | TwiML Bins  | Prototypes, static flows       | Very Low     | No (Twilio)     |
+    | Studio      | Visual design, no-code         | Low          | No (Twilio)     |
+
+  FALLBACK URL
+    Used if the primary call control fails (invalid TwiML, timeout, etc).
+
+  STATUS CALLBACK URL
+    Optional URL for call progress webhooks. For inbound SIP calls, you only
+    receive the `completed` status.
+
+AUTHENTICATION (must configure at least one)
+
+  IP ACCESS CONTROL LISTS (ACL)
+    If configured, Twilio only accepts SIP traffic from these IPs; all other
+    packets are dropped. Full IP only (no wildcards). One ACL can apply to
+    many SIP Domains. REST API is available for creating ACLs.
+
+  CREDENTIAL LISTS
+    Sets of usernames/passwords accepted by your SIP Domain.
+    If configured, Twilio responds with `407 Proxy Authentication Required`.
+    Password rules:
+      * Min 12 characters
+      * At least one mixed case
+      * At least one digit
+    Passwords are MD5-hashed per digest auth spec; not retrievable.
+    REST API is available for creating Credential Lists.
+
+------------------------------------------------------------------
+STEP 2 — ALLOW TWILIO'S IP ADDRESSES AND PORTS
+------------------------------------------------------------------
+Update your firewall allow list to include Twilio SIP IPs.
+Reference: https://www.twilio.com/docs/voice/api/sip-interface#ip-addresses
+
+------------------------------------------------------------------
+STEP 3 — START SENDING SIP TO YOUR DOMAIN
+------------------------------------------------------------------
+Send SIP from your PBX/SBC/IP-phone to your new SIP Domain.
+If you used the demo TwiML, you'll hear:
+  "Congratulations! You just made your first call with Twilio SIP."
+
+------------------------------------------------------------------
+ADVANCED — SIP CUSTOM HEADERS (incoming)
+------------------------------------------------------------------
+Twilio reads any incoming SIP headers beginning with `X-` and prepends them
+with `SipHeader_` when passing them to your webhook as parameters.
+
+Example:
+  X-TestHeader: param1=value1;param2=value2;param3=value3
+
+Headers without the X- prefix are NOT read and won't be passed.
+
+------------------------------------------------------------------
+ADVANCED — UUI HEADER (incoming)
+------------------------------------------------------------------
+To pass caller context, customers use the User-to-User Information header.
+Add it to the SIP INVITE before sending it to Twilio:
+
+  User-to-User: 123456789;encoding=hex
+
+Twilio prepends `SipHeader_` so your webhook receives:
+
+  SipHeader_User-to-User = "123456789;encoding=hex"
+
+NOTE — These custom-header and UUI behaviors apply only to Programmable
+Voice SIP calls. For BYOC trunks, Twilio DOES NOT pass custom headers to
+your webhook; they are discarded.
+
+
+================================================================================
+ 6. OUTBOUND — RECEIVING SIP FROM TWILIO
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/receiving-sip
+
+------------------------------------------------------------------
+HOW IT WORKS
+------------------------------------------------------------------
+Two ways to send SIP from Twilio to your communications infrastructure:
+
+  1) Your app POSTs to the REST API to initiate a new SIP call.
+  2) An inbound PSTN/SIP call invokes your app, which responds with TwiML
+     using the <Sip> noun inside the <Dial> verb:
+
+       <?xml version="1.0" encoding="UTF-8"?>
+       <Response>
+         <Dial>
+           <Sip>sip:jack@example.com</Sip>
+         </Dial>
+       </Response>
+
+------------------------------------------------------------------
+GETTING STARTED
+------------------------------------------------------------------
+Allow Twilio's SIP IPs/ports in your firewall (see section 4 IP Addresses).
+Then your Twilio app can send SIP traffic to your infrastructure.
+
+------------------------------------------------------------------
+ADVANCED — SIP CUSTOM HEADERS (outgoing)
+------------------------------------------------------------------
+Send custom headers as URL params on the <Sip> noun. Combine with `&`:
+
+  <Response>
+    <Dial>
+      <Sip>sip:jack@example.com?x-myotherheader=bar</Sip>
+    </Dial>
+  </Response>
+
+  <Response>
+    <Dial>
+      <Sip>sip:+14158675309@your.domain?X-customName=Bob%2CShield%2BTitle%2DManager&amp;X-otherHeader=true</Sip>
+    </Dial>
+  </Response>
+
+Pass the custom headers as part of the Dial `action` URL or the call screening
+`url`. On successful call setup (200 OK) any X-headers in 200 OK are posted as:
+
+    SipHeader_X-headername = headervalue
+
+On the final SIP response (4xx, 5xx, BYE/200) they are posted as:
+
+    DialSipHeader_X-headername = headervalue
+
+------------------------------------------------------------------
+ADVANCED — UUI HEADER (outgoing)
+------------------------------------------------------------------
+Pass User-to-User as part of <Sip> request:
+
+  <Response>
+    <Dial>
+      <Sip>sip:jack@example.com?User-to-User=123456789%3Bencoding%3Dhex&amp;x-myotherheader=bar</Sip>
+    </Dial>
+  </Response>
+
+You can also send it with an `X-` prefix:
+
+  <Sip>sip:jack@example.com?X-User-to-User=...</Sip>
+
+NOTE — For non-X- headers like UUI, the Dial `action` URL and call-screening
+URL are NOT supported.
+
+------------------------------------------------------------------
+ADVANCED — OTHER STANDARD SIP HEADERS (outgoing)
+------------------------------------------------------------------
+You may pass these standard headers on the <Sip> noun:
+  * Remote-Party-ID
+  * P-Preferred-Identity
+  * P-Called-Party-ID
+
+Action and call-screening URL are NOT supported for these either.
+
+  <Response>
+    <Dial>
+      <Sip>sip:bob@example.com?x-foo%3Dbar&amp;User-To-User=foobar&amp;Remote-Party-ID=%3Csip%3Afoo%40example.com%3E%3Bparty%3Dcalling&amp;P-Preferred-Identity=%3Csip%3Afoo%40example.com%3E&amp;P-Called-Party-ID=%3Csip%3Afoo%40example.com%3E</Sip>
+    </Dial>
+  </Response>
+
+------------------------------------------------------------------
+THE `edge` PARAMETER (outgoing)
+------------------------------------------------------------------
+Specify the geographic edge from which Twilio sends SIP-out traffic:
+
+  <Response>
+    <Dial>
+      <Sip>sip:alice@example.com;edge=frankfurt</Sip>
+    </Dial>
+  </Response>
+
+Edge values:
+  ashburn    — North America Virginia
+  san-jose   — North America Oregon
+  dublin     — Europe Ireland
+  frankfurt  — Europe Frankfurt
+  singapore  — Asia Pacific Singapore
+  tokyo      — Asia Pacific Tokyo
+  sao-paulo  — South America São Paulo
+  sydney     — Asia Pacific Sydney
+
+If `edge` is not specified, Twilio sends from Ashburn, VA (North America VA).
+
+NOTES:
+  * You must allow the Twilio Edge IPs in your firewall.
+  * The `edge` parameter is IGNORED when calling SIP-Registered endpoints —
+    SIP-out traffic always goes from the Twilio edge the endpoint registered
+    with.
+
+
+================================================================================
+ 7. SIP REGISTRATION
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/sip-registration
+
+------------------------------------------------------------------
+WHAT IS SIP REGISTRATION?
+------------------------------------------------------------------
+SIP Endpoints are identified by an Address of Record (AOR):
+
+    sip:user@domain
+
+SIP endpoints are reachable via a location (IP + port + protocol). Since most
+endpoints don't have a fixed public IP, they must register with a Registrar
+so they can receive incoming calls.
+
+The endpoint sends a SIP REGISTER request to the Registrar containing its AOR,
+location, and authentication. The Registrar validates the request and stores
+the binding in its location service.
+
+Your Twilio Programmable Voice SIP Domain allows you to dynamically register
+SIP Endpoints by enabling the "SIP Registration" option on the domain.
+
+------------------------------------------------------------------
+REGISTER YOUR SIP ENDPOINT
+------------------------------------------------------------------
+Twilio's SIP Registrar is deployed per Edge Location. Bindings are shared
+between Edges, so locally-registered endpoints are globally reachable.
+
+Configure the endpoint with the SIP Domain URI including the Edge:
+
+    {domain-name}.sip.{edge-location}.twilio.com
+
+NOTE — If you don't specify an Edge in the registration URI or the outbound
+proxy URI, the registration defaults to Twilio's Ashburn, VA datacenter.
+
+If your device offers both Registration Domain and Outbound Proxy, use:
+    Registration Domain : mydomain.sip.twilio.com
+    Outbound Proxy      : sip.sydney.twilio.com   (or your chosen edge)
+
+Otherwise use the full edge URI as the Registration Domain:
+    mydomain.sip.sydney.twilio.com
+
+------------------------------------------------------------------
+SIP ENDPOINT REGISTRATION AUTHENTICATION
+------------------------------------------------------------------
+REGISTER requests are authenticated against Credential Lists mapped to your
+SIP Domain. The Username configured in the SIP Endpoint must exactly match a
+Username in a Credential List on the Domain.
+
+------------------------------------------------------------------
+REGISTER EXPIRY AND REFRESH INTERVALS
+------------------------------------------------------------------
+The endpoint must re-register periodically, or the registration is removed.
+
+  * Smallest Expiration Twilio accepts: 600 seconds (10 minutes).
+    Lower values produce a "423 Interval too brief" SIP error.
+  * Largest Expiration Twilio accepts: 3600 seconds (1 hour).
+    Larger values are reduced to 1 hour as part of REGISTER negotiation.
+
+Set the Refresh interval lower than Expiration (typically half), e.g.:
+    Expiration = 600 s   →   Refresh = 300 s
+
+------------------------------------------------------------------
+LIMITS
+------------------------------------------------------------------
+  * Max 100 SIP Domains per Account
+  * Max 10 Active Endpoint registrations per AOR
+      (11th REGISTER for the same AOR is rejected)
+  * Max 100 Credential Lists per SIP Domain
+  * Max 1000 users per Credential List
+  * If fully maxed, 1 Million Active Endpoint registrations per SIP Domain
+  * If fully maxed, 100 Million Active Endpoint registrations per Account
+
+------------------------------------------------------------------
+RECEIVING CALLS ON YOUR REGISTERED SIP ENDPOINT
+------------------------------------------------------------------
+Use the same TwiML/REST methods you use today. When calling a registered SIP
+endpoint, use the general SIP Domain URI (no edge):
+
+    {username}@{domain-name}.sip.twilio.com
+
+Twilio calls all SIP Endpoints registered under that AOR in parallel across
+edges (all ring simultaneously).
+
+Configuring call handling — Functions (recommended), Webhooks, TwiML Bins,
+or Studio Flows.
+
+EXAMPLE — TwiML Bin to ring your SIP endpoint when a Twilio number is called:
+
+    <Response>
+      <Dial>
+        <Sip>myusername@mysipdomain.sip.twilio.com</Sip>
+      </Dial>
+    </Response>
+
+------------------------------------------------------------------
+MAKING CALLS WITH YOUR REGISTERED SIP ENDPOINT
+------------------------------------------------------------------
+SIP calls from your registered Endpoint to your Twilio SIP Domain are treated
+just like any inbound SIP call. After auth, Twilio invokes the Voice URL.
+
+Your Endpoint normally sends INVITEs to the edge-specific domain it
+registered with, but they can be sent to any Twilio edge.
+
+TEST CONNECTIVITY
+  Set your Domain Voice URL to:
+    http://demo.twilio.com/docs/voice.xml
+  This says a brief message and plays music.
+
+------------------------------------------------------------------
+CALLING THE PSTN FROM A REGISTERED SIP ENDPOINT
+------------------------------------------------------------------
+Use TwiML Bin Templates that extract username from From/To SIP URIs.
+
+Static callerId example:
+    <Response>
+      <Dial callerId="+14087998994">{{#e164}}{{To}}{{/e164}}</Dial>
+    </Response>
+
+Dynamic callerId (the SIP caller's verified number):
+    <Response>
+      <Dial callerId="{{#e164}}{{From}}{{/e164}}">{{#e164}}{{To}}{{/e164}}</Dial>
+    </Response>
+
+Notes:
+  * Dialed numbers must be E.164 (e.g. +14157012311, +441562720212).
+    Use the Twilio Lookup tool for E.164 formatting.
+  * The callerId must be a verified Twilio number.
+
+------------------------------------------------------------------
+CONFIGURE YOUR SIP ENDPOINT — Available config guides
+------------------------------------------------------------------
+Twilio supports standard SIP Registration. Available guides:
+  * Bria iPhone Edition 3.6.3
+  * Bria 4.4.4.0
+  * GrandStream GXP2130
+  * Obihai 1022
+  * Polycom SoundStation IP 5000
+  * Polycom VVX400 / VVX500
+  * Zoiper iPhone 3.6.1
+  * Dolby Conference Phone
+  * Guide to Configuring Twilio for OBIHAI Phones
+
+These are general guidelines, not configuration templates. Twilio cannot
+support third-party products; contact the manufacturer.
+
+To submit a new guide or corrections, email:
+    sip.interconnectionguides@twilio.com
+
+
+================================================================================
+ 8. SECURE MEDIA (SRTP / TLS)
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/secure-media
+
+Secure Media uses encryption (SRTP for media + TLS for SIP signaling) to ensure
+call media/signaling stays private. SRTP is defined by RFC 4568.
+
+------------------------------------------------------------------
+INBOUND
+------------------------------------------------------------------
+You can enable or disable Secure Media in your SIP Domain. Disabled by default.
+
+  ENABLED:
+    * TLS MUST be used for SIP signaling.
+    * SRTP MUST be used for media packets.
+    * Any non-encrypted call is rejected.
+
+  DISABLED:
+    * RTP must be used for media packets.
+    * SIP messages may be cleartext or TLS.
+    * Any SRTP-encrypted call is rejected.
+
+NOTE — SRTP crypto suites supported:
+    AES_CM_128_HMAC_SHA1_80
+    AES_CM_128_HMAC_SHA1_32
+  Both may be included in an order of preference.
+  The optional master key identifier (MKI) parameter is NOT supported.
+
+------------------------------------------------------------------
+OUTBOUND
+------------------------------------------------------------------
+Set `secure=true` on the SIP URI to secure media in outbound calls:
+
+    <?xml version="1.0" encoding="UTF-8"?>
+    <Response>
+      <Dial>
+        <Sip>sip:jack@example.com;secure=true</Sip>
+      </Dial>
+    </Response>
+
+  * Default port 5061 is used for TLS.
+  * Only crypto suite included on outbound: AES_CM_128_HMAC_SHA1_80
+  * MKI parameter NOT supported.
+
+------------------------------------------------------------------
+TLS/SRTP SUPPORT WITH ASTERISK
+------------------------------------------------------------------
+Asterisk ships with `chan_sip` by default — works well with Twilio.
+
+If you run PJSIP:
+  * Asterisk 13.8 cert2 defaults to PJSIP 2.5 which will NOT work with Twilio
+    for TLS/SRTP. (Non-encrypted calls still work.)
+  * Use the latest PJSIP driver — at the time of writing, 2.5.5.
+
+The following log message can be ignored:
+    "RFC 5922 (section 7.2) does not allow TLS wildcard certificates.
+     Advise your SIP provider, please!"
+
+
+================================================================================
+ 9. INBOUND SIP REFER TO TWILIO — Blind call transfer
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/refer-to-twilio
+ For OUTBOUND SIP REFER, use the TwiML verb <Refer>.
+
+Call transfer moves an active call from one endpoint to another. Twilio's
+Programmable Voice SIP calls support "blind" call transfers using SIP REFER.
+
+You can transfer on both inbound and outbound SIP calls. For example, on an
+inbound SIP call to a Twilio SIP Domain, a SIP phone can press "Transfer" to
+send a REFER to Twilio with the new agent's contact info; Twilio handles the
+redirect.
+
+REFER works for SIP calls created with <Dial> using nouns:
+  * <Sip>
+  * <Number>
+  * <Client>
+
+REFER does NOT support <Conference> or <Queue>.
+
+Max length of the Refer-To header is 256 characters.
+
+------------------------------------------------------------------
+HOW TO SEND REFER TO TWILIO
+------------------------------------------------------------------
+Set `referUrl` in the initial call's <Dial> verb. Optional `referMethod`.
+
+  | Attribute    | Allowed Values | Default |
+  |--------------|----------------|---------|
+  | referUrl     | Any URL        | None    |
+  | referMethod  | GET, POST      | POST    |
+
+Twilio fires a webhook to `referUrl` with the REFER details, including
+`ReferTransferTarget` (the contents of the Refer-To header).
+
+------------------------------------------------------------------
+EXAMPLE CALL FLOW
+------------------------------------------------------------------
+  1) UserA calls a bank, connected to AgentA's SIP phone.
+     The initial <Dial> includes `referUrl`.
+  2) AgentA presses Transfer → SIP REFER is sent to Twilio with AgentB's
+     contact in the Refer-To header.
+  3) Twilio webhooks `referUrl` with the data; the customer's app returns
+     TwiML to dial AgentB; Twilio bridges UserA with AgentB.
+
+------------------------------------------------------------------
+TWIML EXAMPLES
+------------------------------------------------------------------
+Without answerOnBridge (default false): Twilio sends NOTIFY and disconnects
+the Transferor leg as soon as the referUrl webhook completes.
+
+    <Response>
+      <Dial referUrl="https://example.com/handler">
+        <Sip>sip:AgentA@xyz.sip.us1.twilio.com?User-to-User=123456789%3Bencoding%3Dhex&amp;X-Name=Agent%2C+A</Sip>
+      </Dial>
+    </Response>
+
+With answerOnBridge="true": Twilio waits for AgentB to answer before
+disconnecting AgentA. If AgentB fails, UserA stays connected with AgentA.
+
+    <Response>
+      <Dial answerOnBridge="true" referUrl="https://example.com/handler">
+        <Sip>sip:AgentA@xyz.sip.us1.twilio.com?User-to-User=123456789%3Bencoding%3Dhex&amp;X-Name=Agent%2C+A</Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE referUrl response:
+
+    <Response>
+      <Dial>
+        <Sip>sip:AGENTB@YOURDOMAIN.sip.us1.twilio.com</Sip>
+      </Dial>
+    </Response>
+
+NOTE — A referUrl is NOT necessary in this transfer leg.
+
+------------------------------------------------------------------
+NODE.JS EXAMPLES
+------------------------------------------------------------------
+Stay on call until transferred (answerOnBridge=true):
+
+    const VoiceResponse = require('twilio').twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    const dial = response.dial({
+      answerOnBridge: true,
+      referUrl: 'https://example.com/handler',
+    });
+    dial.sip(
+      'sip:AgentA@xyz.sip.us1.twilio.com?User-to-User=123456789%3Bencoding%3Dhex&X-Name=Agent%2C+A'
+    );
+    console.log(response.toString());
+
+------------------------------------------------------------------
+USE CASES MATRIX (answerOnBridge=true VS false)
+------------------------------------------------------------------
+  | Scenario                                | answerOnBridge=true                 | answerOnBridge=false (default) |
+  |-----------------------------------------|--------------------------------------|--------------------------------|
+  | referUrl webhook executes               | Initial call still connected         | Initial call disconnected      |
+  | AgentB answers                          | Initial call disconnects now         | Already disconnected           |
+  | AgentB does not answer                  | UserA reconnected to AgentA          | UserA dropped (can't re-est.)  |
+  | referUrl unreachable                    | UserA reconnected to AgentA          | UserA dropped                  |
+  | referUrl missing from <Dial>            | Twilio alert; UserA stays w/ AgentA  | Twilio alert; same             |
+
+
+================================================================================
+ 10. MAKING SIP CALLS VIA REST API
+================================================================================
+ Source: https://www.twilio.com/docs/voice/api/sip-making-calls
+
+Use Twilio's REST API to initiate SIP sessions to SIP-enabled endpoints.
+
+------------------------------------------------------------------
+HTTP POST TO CALLS
+------------------------------------------------------------------
+POST to your account's Calls list resource:
+
+    /2010-04-01/Accounts/{AccountSid}/Calls
+
+All standard outbound-call parameters are supported. The only difference vs
+PSTN calls: put a SIP URI in `To`, and any caller string in `From`.
+
+------------------------------------------------------------------
+POST PARAMETERS
+------------------------------------------------------------------
+REQUIRED:
+  | Parameter | Description                                           |
+  | To        | The SIP URI to connect to (max 255 chars).            |
+              Example: sip:michael@example.com
+
+HEADERS (passed via the `To` parameter):
+  Append `?header=value&header2=value2` to the SIP URI.
+  For some SDKs, `&` must be encoded as `%26`. Total header chars < 1024.
+    sip:michael@example.com?mycustomheader=foo&myotherheader=bar
+
+TRANSPORT (URL parameter):
+  Set transport on the SIP URI: UDP (default), TCP, or TLS.
+    sip:jack@example.com;transport=tcp
+
+  NOTE — transport=tls only encrypts SIP signaling, NOT RTP.
+  For full media + signaling encryption use:
+    sip:jack@example.com;secure=true
+
+OPTIONAL:
+  | Parameter         | Description                                          |
+  | From              | Populates the SIP From header username.              |
+                       Allowed: alphanumeric + `+-_.`. No spaces/other.
+  | SipAuthUsername   | Your authentication username.                        |
+  | SipAuthPassword   | The password for the user.                           |
+
+------------------------------------------------------------------
+EXAMPLES
+------------------------------------------------------------------
+Basic SIP dial (Node.js):
+
+    const twilio = require("twilio");
+    const accountSid = process.env.TWILIO_ACCOUNT_SID;
+    const authToken  = process.env.TWILIO_AUTH_TOKEN;
+    const client     = twilio(accountSid, authToken);
+
+    async function createCall() {
+      const call = await client.calls.create({
+        from: "Jack",
+        to:   "sip:kate@example.com",
+        url:  "http://www.example.com/sipdial.xml",
+      });
+      console.log(call.sid);
+    }
+    createCall();
+
+SIP dial WITH authentication:
+
+    await client.calls.create({
+      from: "Jack",
+      sipAuthPassword: "secret",
+      sipAuthUsername: "jack",
+      to:  "sip:kate@example.com",
+      url: "http://www.example.com/sipdial.xml",
+    });
+
+Pass headers via SIP URI:
+
+    await client.calls.create({
+      from: "Jack",
+      to:   "sip:kate@example.com?X-hatchkey=4815162342",
+      url:  "http://www.example.com/sipdial.xml",
+    });
+
+------------------------------------------------------------------
+SAMPLE RESPONSE (truncated)
+------------------------------------------------------------------
+    {
+      "account_sid":  "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "api_version":  "2010-04-01",
+      "date_created": "Tue, 31 Aug 2010 20:36:28 +0000",
+      "direction":    "inbound",
+      "duration":     "15",
+      "from":         "Jack",
+      "from_formatted":"(415) 867-5308",
+      "price":        "-0.03000",
+      "price_unit":   "USD",
+      "sid":          "CAxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "start_time":   "Tue, 31 Aug 2010 20:36:29 +0000",
+      "status":       "completed",
+      "to":           "sip:kate@example.com",
+      "to_formatted": "(415) 867-5309",
+      "subresource_uris": {
+        "recordings":     ".../Recordings.json",
+        "notifications":  ".../Notifications.json",
+        "payments":       ".../Payments.json",
+        "events":         ".../Events.json",
+        "siprec":         ".../Siprec.json",
+        "streams":        ".../Streams.json",
+        "transcriptions": ".../Transcriptions.json"
+      },
+      "uri": "/2010-04-01/Accounts/ACxxxx/Calls/CAxxxx.json"
+    }
+
+
+================================================================================
+ 11. TWIML <Sip> NOUN — Full reference
+================================================================================
+ Source: https://www.twilio.com/docs/voice/twiml/sip
+
+The <Dial> verb's <Sip> noun sets up VoIP sessions via SIP. With this you can
+send a call to any SIP endpoint. Configure your TwiML to use <Sip> inside
+<Dial> whenever a Twilio phone number is called.
+
+------------------------------------------------------------------
+THE SIP SESSION
+------------------------------------------------------------------
+The SIP INVITE includes the API version, AccountSid, and CallSid for the call.
+You can optionally provide parameters to manage signaling transport,
+authentication, or custom headers (incl. UUI).
+
+When the SIP session completes, Twilio requests the <Dial> action URL,
+passing the SIP CallID, the response code of the INVITE, any X-headers in
+the final SIP response, and the standard Twilio <Dial> parameters.
+
+------------------------------------------------------------------
+THE `region` PARAMETER (legacy regions)
+------------------------------------------------------------------
+Specify the geographic region from which Twilio sends SIP-out traffic:
+
+    <Response>
+      <Dial>
+        <Sip>sip:alice@example.com;region=ie1</Sip>
+      </Dial>
+    </Response>
+
+  us1 — North America Virginia
+  us2 — North America Oregon
+  ie1 — Europe Ireland
+  de1 — Europe Frankfurt
+  sg1 — Asia Pacific Singapore
+  jp1 — Asia Pacific Tokyo
+  br1 — South America São Paulo
+  au1 — Asia Pacific Sydney
+
+If `region` is not specified, Twilio sends from us1 (North America Virginia).
+
+------------------------------------------------------------------
+USE THE <Sip> NOUN
+------------------------------------------------------------------
+All existing <Dial> parameters work with <Sip> (record, timeout, hangupOnStar,
+etc.). For SIP calls the `callerId` attribute does NOT need to be a verified
+phone number — any alphanumeric string is fine (+-_. allowed, no whitespace).
+
+The SIP URI inside <Sip> must be under 255 characters.
+
+Node.js example:
+
+    const VoiceResponse = require('twilio').twiml.VoiceResponse;
+    const response = new VoiceResponse();
+    const dial = response.dial();
+    dial.sip('sip:jack@example.com');
+    console.log(response.toString());
+
+------------------------------------------------------------------
+AUTHENTICATION (on the <Sip> noun)
+------------------------------------------------------------------
+Use `username` and `password` attributes:
+
+    <Response>
+      <Dial>
+        <Sip username="admin" password="1234">sip:kate@example.com</Sip>
+      </Dial>
+    </Response>
+
+Node.js:
+
+    dial.sip({ username: 'admin', password: '1234' }, 'sip:kate@example.com');
+
+------------------------------------------------------------------
+CUSTOM HEADERS
+------------------------------------------------------------------
+Append `?x-name=value&x-name2=value2` to the SIP URI.
+Headers must be under 1024 chars. Any header starting with `x-` is allowed.
+
+You can also send multiple param/value pairs in a single header:
+
+    <Sip>sip:jack@example.com?x-customname=Madhu%2CMathiyalagan%3BTitle%3DManager&amp;x-myotherheader=bar</Sip>
+
+UUI (User-to-User) can be sent WITHOUT `x-`:
+
+    <Sip>sip:jack@example.com?User-to-User=123456789%3Bencoding%3Dhex&amp;x-myotherheader=bar</Sip>
+
+Standard SIP headers that may also be sent WITHOUT `x-`:
+  * Remote-Party-ID
+  * P-Preferred-Identity
+  * P-Called-Party-ID
+
+------------------------------------------------------------------
+TRANSPORT
+------------------------------------------------------------------
+Default is UDP. Override with `;transport=tcp` or `;transport=tls`:
+
+    <Sip>sip:jack@example.com;transport=tcp</Sip>
+    <Sip>sip:jack@example.com;transport=tls</Sip>   <!-- default port 5061 -->
+
+------------------------------------------------------------------
+<Sip> CALL PARAMETERS (passed to your TwiML handler)
+------------------------------------------------------------------
+  | Parameter      | Description                                              |
+  | Called         | To header of the SIP INVITE.                             |
+  | Caller         | From header of the SIP INVITE.                           |
+  | SipCallId      | The SIP Call-ID header of the request to remote.         |
+  | SipDomain      | The host part of the SIP request.                        |
+  | SipDomainSid   | Your SIP Domain ID (34 chars, starts with SD).           |
+  | SipHeader_*    | Name/value of any X-headers in the 200 response.         |
+  | SipSourceIp    | Source IP address for SIP signaling.                     |
+
+------------------------------------------------------------------
+ADDITIONAL PARAMETERS — passed to your Dial action URL
+------------------------------------------------------------------
+  | Parameter           | Description                                          |
+  | DialSipCallId       | SIP Call-ID of the request to remote.                |
+  | DialSipResponseCode | SIP response code of the INVITE attempt.             |
+  | DialSipHeader_*     | Name/value of any X-headers in the final response.   |
+
+------------------------------------------------------------------
+<Sip> ATTRIBUTES (table)
+------------------------------------------------------------------
+  | Attribute                          | Values                  | Default |
+  | method                             | GET, POST               | POST    |
+  | password                           | (SIP auth password)     |         |
+  | statusCallbackEvent                | initiated, ringing,     |         |
+  |                                    | answered, completed     | none    |
+  | statusCallback                     | any URL                 | none    |
+  | statusCallbackMethod               | GET, POST               | POST    |
+  | url                                | call screening URL      | none    |
+  | username                           | (SIP auth username)     |         |
+  | machineDetection                   | Enable, DetectMessageEnd| None    |
+  | machineDetectionTimeout            | 3-60                    | 30      |
+  | machineDetectionSpeechThreshold    | 1000-6000               | 2400    |
+  | machineDetectionSpeechEndThreshold | 500-5000                | 1200    |
+  | machineDetectionSilenceTimeout     | 2000-10000              | 5000    |
+  | amdStatusCallback                  | any URL                 | none    |
+  | amdStatusCallbackMethod            | GET, POST               | POST    |
+
+ATTRIBUTE DETAILS:
+
+  url
+    URL for a TwiML doc that runs on the called party's end AFTER they
+    answer but BEFORE the two parties are connected.
+    Useful for <Say>/<Play> announcements or <Gather>+<Hangup> screening.
+    If `answerOnBridge` is used on <Dial>, the caller hears ringing while
+    this TwiML executes. The TwiML CANNOT contain a <Dial> verb.
+
+  method
+    HTTP method for the `url` attribute. Default POST.
+
+  statusCallbackEvent
+    Subscribe to webhooks for call progress. Multiple events space-separated:
+      "initiated ringing answered completed"
+    If statusCallback is set without statusCallbackEvent, only `completed`
+    is sent by default.
+
+  statusCallback
+    URL for Twilio to POST webhook requests on each subscribed event.
+    Hostnames cannot contain underscores.
+    Extra parameters posted to this URL:
+      CallSid, ParentCallSid, CallStatus, CallDuration, RecordingUrl,
+      RecordingSid, RecordingDuration, Timestamp, CallbackSource (always
+      "call-progress-events"), SequenceNumber.
+
+  statusCallbackMethod
+    HTTP method. Default POST.
+
+  machineDetection
+    Enable or DetectMessageEnd.
+      Enable: returns AnsweredBy as soon as the party is identified.
+      DetectMessageEnd: waits to leave a message on an answering machine.
+  machineDetectionTimeout
+    Seconds to attempt AMD before returning AnsweredBy=unknown.
+  machineDetectionSpeechThreshold
+    Speech length (ms) below = human, above = machine.
+  machineDetectionSpeechEndThreshold
+    ms of silence after speech to mark activity complete.
+  machineDetectionSilenceTimeout
+    ms of initial silence after which AnsweredBy=unknown.
+  amdStatusCallback
+    URL for AMD result notification.
+  amdStatusCallbackMethod
+    HTTP method for amdStatusCallback.
+
+------------------------------------------------------------------
+EXAMPLES
+------------------------------------------------------------------
+EXAMPLE 1 — Dial a SIP endpoint:
+    <Response>
+      <Dial>
+        <Sip>kate@example.com</Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE 2 — Dial with auth:
+    <Response>
+      <Dial>
+        <Sip username="admin" password="1234">kate@example.com</Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE 3 — Custom headers:
+    <Response>
+      <Dial>
+        <Sip>sip:kate@example.com?x-mycustomheader=foo&amp;x-myotherheader=bar</Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE 4 — Dial with multiple attributes + call screening:
+    <Response>
+      <Dial
+       record="record-from-answer"
+       timeout="10"
+       hangupOnStar="true"
+       callerId="bob"
+       method="POST"
+       action="/handle_post_dial">
+        <Sip method="POST" url="/handle_screening_on_answer">
+          sip:kate@example.com?x-customheader=foo
+        </Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE 5 — Call Progress Events:
+    <Response>
+      <Dial>
+        <Sip
+         statusCallbackEvent='initiated ringing answered completed'
+         statusCallback='https://myapp.com/calls/events'
+         statusCallbackMethod='POST'>
+          sip:kate@example.com
+        </Sip>
+      </Dial>
+    </Response>
+
+EXAMPLE 6 — Parallel calling (simultaneous dialing) — up to 10 endpoints:
+    <Response>
+      <Dial>
+        <Number>+12143211432</Number>
+        <Sip>sip:alice-soft-phone@example.com</Sip>
+        <Sip>sip:alice-desk-phone@example.com</Sip>
+        <Sip>sip:alice-mobile-client@example.com</Sip>
+      </Dial>
+    </Response>
+
+  WARNING: First call to connect cancels the others. If you ring an office
+  PBX or a phone in airplane mode, that endpoint may pick up after a single
+  ring and prevent the rest from completing.
+
+EXAMPLE 7 — Serial calling (sequential dialing) — up to 10 endpoints:
+    <Response>
+      <Dial sequential="true">
+        <Sip>sip:alice@example.com</Sip>
+        <Sip>sip:bob@example.com</Sip>
+        <Sip>sip:charlie@example.com</Sip>
+      </Dial>
+    </Response>
+
+  If Alice rejects/doesn't answer → call Bob → then Charlie. Order matches
+  the order in the <Dial> verb.
+
+
+================================================================================
+ 12. EMERGENCY CALLING FOR SIP INTERFACES
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/emergency-calling
+
+Emergency Calling routes calls to Public Safety Answering Points (PSAPs) in:
+  US, Canada, UK, Australia, Ireland, France, Germany, Austria.
+
+US/CA support BOTH Enhanced 911 (E911) and Basic 911.
+  E911   → routed to PSAP serving the registered address; caller's number
+           and address are auto-provided to the dispatcher.
+  Basic  → routed to designated PSAP; dispatcher will NOT have the caller's
+           number/address unless given verbally.
+Some Twilio numbers don't have E911/Basic 911 — those 911 calls go to a
+national emergency call center.
+
+UK supports BOTH 999 and 112.
+
+------------------------------------------------------------------
+COSTS
+------------------------------------------------------------------
+  * US/CA: If you make a 911 call from a number WITHOUT a registered emergency
+    address, Twilio charges $75 per 911 call.
+  * Associating a validated emergency address with a phone number costs
+    $0.75 per phone number per month.
+
+------------------------------------------------------------------
+TWO USE CASES
+------------------------------------------------------------------
+USE CASE 1 — Emergency calling with a Twilio phone number:
+  1. Purchase a US/CA/UK Twilio number capable of emergency calling.
+  2. Configure a webhook URL for the number.
+  3. Validate + associate an address with the number.
+  4. Configure + register the number with your SIP Domain.
+  5. Enable your SIP Domain for emergency calling.
+  6. (US/CA only) Test emergency calling via 933.
+  7. Place a live emergency test call.
+
+USE CASE 2 — Emergency calling with an Emergency Caller ID:
+  1. Purchase a US/CA/UK Twilio number capable of emergency calling.
+  2. Configure a webhook URL for the number.
+  3. Validate + associate an address with the number.
+  4. Enable your SIP Domain for emergency calling.
+  5. Set an Emergency Caller ID.
+  6. Register your SIP Phone with your SIP Domain.
+  7. (US/CA only) Test emergency calling via 933.
+  8. Place a live emergency test call.
+
+------------------------------------------------------------------
+VALIDATE + ASSOCIATE AN ADDRESS
+------------------------------------------------------------------
+For the US/CA, the address must be recognized by the Master Street Address
+Guide (MSAG) database. (MSAG often differs from USPS due to community names
+used by the closest PSAP.) Each address can be used for any phone number
+that supports emergency calling.
+
+You can configure Emergency Calling via Console or via the Emergency Calling
+API.
+
+------------------------------------------------------------------
+CONFIGURE THE WEBHOOK URL ON THE NUMBER
+------------------------------------------------------------------
+The number must have a valid webhook URL (NOT blank, NOT the Twilio demo).
+Voice & Fax > A Call Comes In > Webhook.
+
+------------------------------------------------------------------
+REGISTER WITH YOUR SIP DOMAIN
+------------------------------------------------------------------
+Each SIP Phone must be configured to send the assigned Twilio emergency
+calling number in the call's `From` header.
+
+------------------------------------------------------------------
+ENABLE YOUR SIP DOMAIN FOR EMERGENCY CALLING
+------------------------------------------------------------------
+Emergency calls only route when an emergency-enabled number is used as the
+Caller ID (via the SIP `From:` header). All other From numbers are rejected.
+
+------------------------------------------------------------------
+SET AN EMERGENCY CALLER ID (use case 2 only)
+------------------------------------------------------------------
+Provides a single phone number to emergency services as a callback number.
+Only Twilio numbers with a registered emergency address can be selected.
+Be sure to select a number from the country where you want to place
+emergency calls.
+
+------------------------------------------------------------------
+TEST EMERGENCY CALLING (US/CA) — Dial 933
+------------------------------------------------------------------
+Dialing 933 connects to an automated system that reads back the Twilio
+phone number you're calling from and the address associated with it.
+You may need to add 933 to your dial plan.
+
+------------------------------------------------------------------
+LIVE EMERGENCY TEST CALL
+------------------------------------------------------------------
+Request-URI format:
+    sip:911@<CompanyName>.sip.us1.twilio.com
+    sip:933@<CompanyName>.sip.us1.twilio.com   (test)
+
+Ensure your SIP Phone sends the assigned Emergency Caller ID in the `From`
+header, and your dial plan sends 112/999/911/933 to Twilio.
+
+WARNING — Twilio IGNORES your webhook and routes directly to the PSAP.
+
+If you place a real test call to verify, use this script:
+  * "Hello, this is not an emergency call. This is a test. Do you have a
+     moment to verify my emergency information or can we schedule a later
+     time?"
+  * "Can you verify the address you received for my call?"
+  * "Can you verify the telephone number you received for my call?"
+  * "Thank you for your time."
+
+NOTE — Some localities require scheduling emergency test calls in advance
+and may charge penalties otherwise. Check with local authorities first.
+
+------------------------------------------------------------------
+IMPORTANT CONFIGURATION REQUIREMENTS
+------------------------------------------------------------------
+  * The `From:` header must:
+      a. Use an E.164-formatted SIP URI.
+      b. Be a Twilio number enabled for emergency calling.
+    Format:
+      From: sip:+1NPANXXYYYY@<CompanyName>.sip.us1.twilio.com
+  * The emergency number must be valid for the same country as the From
+    number.
+  * The phone number must have a valid webhook URL so the PSAP can call back.
+
+------------------------------------------------------------------
+CHANGE AN EMERGENCY ADDRESS
+------------------------------------------------------------------
+  1. Dis-associate the address from the number.
+  2. Verify the address status is "unregistered".
+  3. Associate the new address.
+  4. Verify the new address is "registered".
+
+------------------------------------------------------------------
+MODIFY AN EMERGENCY ADDRESS
+------------------------------------------------------------------
+  1. Dis-associate the address from ALL numbers using it.
+  2. Verify "unregistered" on each.
+  3. Modify the Emergency Address.
+  4. Re-associate the address to the number(s).
+  5. Verify "registered".
+
+If an address mismatch persists, file a support ticket.
+
+
+================================================================================
+ 13. QUICK GLOSSARY
+================================================================================
+
+  AOR (Address of Record)
+    A high-level SIP identifier in the form `sip:user@domain`. Independent
+    of the physical device.
+
+  Communications Infrastructure
+    Broad term for IP-PBX, SBC, IP-phones, etc.
+
+  Credential List
+    A set of username/password pairs accepted by a SIP Domain. Passwords
+    must be 12+ chars, mixed case, with at least one digit. Stored as MD5
+    hashes per digest auth spec.
+
+  DTMF
+    Dual-Tone Multi-Frequency tones (touch-tone). Twilio supports RFC-2833.
+
+  Edge Location
+    A geographic Twilio datacenter (ashburn, frankfurt, tokyo, etc.).
+    Affects latency and where SIP-out traffic originates.
+
+  ICE / SRTP / SDES
+    SRTP encrypts RTP media; SDES (RFC 4568) exchanges crypto material via
+    SDP attributes.
+
+  IP ACL (IP Access Control List)
+    Allow-list of IPs from which a SIP Domain accepts SIP traffic. No
+    wildcards; full IPs only.
+
+  PCMU / PCMA (G.711 μ-law / A-law)
+    The default media codecs Twilio supports; no transcoding needed.
+
+  PSAP (Public Safety Answering Point)
+    The 911/999/112 call center serving a given address.
+
+  REFER
+    SIP method to transfer a call. Twilio supports inbound REFER as blind
+    transfer via the `referUrl` attribute on <Dial>.
+
+  REGISTER
+    SIP method an endpoint uses to tell a Registrar where it is.
+    Twilio's min Expiration is 600s, max is 3600s.
+
+  SIP Endpoint
+    An IP-phone or soft client used by a person to initiate VoIP calls.
+
+  SIP URI
+    `sip:username@SIPDomain`. The "phone number" of SIP.
+
+  Twilio SIP Domain
+    `{example}.sip.{region}.twilio.com`. The Twilio-hosted entry point for
+    SIP traffic for your account.
+
+  UUI (User-to-User Information)
+    SIP header that carries contextual information from the caller.
+
+  X- headers
+    Custom SIP headers prefixed with `X-`. Twilio prepends `SipHeader_` when
+    relaying them to your webhook.
+
+
+================================================================================
+ 14. LIMITS SUMMARY
+================================================================================
+
+  SIP Domains per Account/Sub-account .................... 100
+  Active Endpoint Registrations per AOR ..................  10 (11th rejected)
+  Credential Lists per SIP Domain ........................ 100
+  Users per Credential List .............................. 1,000
+  Active Registrations per SIP Domain (max possible) ..... 1,000,000
+  Active Registrations per Account (max possible) ........ 100,000,000
+  Min SIP REGISTER Expiration ............................ 600 s (10 min)
+  Max SIP REGISTER Expiration ............................ 3,600 s (1 hour)
+  Max SIP URI length .................................... 255 chars
+  Max headers length .................................... 1,024 chars
+  Max Refer-To header length ............................ 256 chars
+  Max parallel/sequential <Sip>/<Number>/<Client> nouns
+    inside one <Dial> verb ............................... 10
+  Required TLS version .................................. TLSv1.2 only
+  TLS port .............................................. 5061
+  Supported media codecs ................................ G.711 μ-law, A-law
+  Supported SRTP crypto (inbound) ....................... AES_CM_128_HMAC_SHA1_80
+                                                            AES_CM_128_HMAC_SHA1_32
+  Supported SRTP crypto (outbound) ...................... AES_CM_128_HMAC_SHA1_80
+  US/CA fee for 911 from unregistered address ........... $75 per call
+  US/CA cost of registering emergency address ........... $0.75/number/month
+
+
+================================================================================
+ 15. KEY URLs & REFERENCE LINKS
+================================================================================
+
+  OVERVIEW & QUICKSTARTS
+    Programmable Voice                 https://www.twilio.com/docs/voice
+    SIP Overview                       https://www.twilio.com/docs/voice/sip
+    SIP Quickstart                     https://www.twilio.com/docs/voice/sip/quickstart
+    Use SIP with Twilio Voice          https://www.twilio.com/docs/voice/api/sip-interface
+
+  CORE SIP
+    Sending SIP to Twilio (inbound)    https://www.twilio.com/docs/voice/api/sending-sip
+    Receiving SIP from Twilio (out)    https://www.twilio.com/docs/voice/api/receiving-sip
+    SIP Registration                   https://www.twilio.com/docs/voice/api/sip-registration
+    Secure Media (SRTP/TLS)            https://www.twilio.com/docs/voice/api/secure-media
+    SIP REFER to Twilio                https://www.twilio.com/docs/voice/api/refer-to-twilio
+    Making SIP Calls (REST API)        https://www.twilio.com/docs/voice/api/sip-making-calls
+    TwiML <Sip> noun                   https://www.twilio.com/docs/voice/twiml/sip
+    Emergency Calling for SIP          https://www.twilio.com/docs/voice/sip/emergency-calling
+
+  SIP API RESOURCES
+    SIP Domain Resource                https://www.twilio.com/docs/voice/sip/api/sip-domain-resource
+    SIP Credential Resource            https://www.twilio.com/docs/voice/sip/api/sip-credential-resource
+    SIP CredentialList Resource        https://www.twilio.com/docs/voice/sip/api/sip-credentiallist-resource
+    SIP CredentialListMapping          https://www.twilio.com/docs/voice/sip/api/sip-credentiallistmapping-resource
+    SIP IpAccessControlList            https://www.twilio.com/docs/voice/sip/api/sip-ipaccesscontrollist-resource
+    SIP IpAccessControlListMapping     https://www.twilio.com/docs/voice/sip/api/sip-ipaccesscontrollistmapping-resource
+    SIP IpAddress Resource             https://www.twilio.com/docs/voice/sip/api/sip-ipaddress-resource
+    Emergency Calling API              https://www.twilio.com/docs/voice/sip/api/emergency-calling-api
+
+  RELATED TWIML
+    <Dial>                             https://www.twilio.com/docs/voice/twiml/dial
+    <Number>                           https://www.twilio.com/docs/voice/twiml/number
+    <Client>                           https://www.twilio.com/docs/voice/twiml/client
+    <Conference>                       https://www.twilio.com/docs/voice/twiml/conference
+    <Queue>                            https://www.twilio.com/docs/voice/twiml/queue
+    <Refer>                            https://www.twilio.com/docs/voice/twiml/refer
+    <Reject>                           https://www.twilio.com/docs/voice/twiml/reject
+    <Gather>                           https://www.twilio.com/docs/voice/twiml/gather
+    <Stream>                           https://www.twilio.com/docs/voice/twiml/stream
+    <Siprec>                           https://www.twilio.com/docs/voice/twiml/siprec
+    <Transcription>                    https://www.twilio.com/docs/voice/twiml/transcription
+    TwiML Voice Changelog              https://www.twilio.com/docs/voice/twiml/changelog
+
+  CALL HANDLING / ADVANCED
+    Make outbound calls tutorial       https://www.twilio.com/docs/voice/tutorials/how-to-make-outbound-phone-calls
+    Respond to incoming calls          https://www.twilio.com/docs/voice/tutorials/how-to-respond-to-incoming-phone-calls
+    Build an IVR phone tree            https://www.twilio.com/docs/voice/tutorials/build-interactive-voice-response-ivr-phone-tree
+    Retrieve call logs                 https://www.twilio.com/docs/voice/tutorials/how-to-retrieve-call-logs
+    Voice Insights                     https://www.twilio.com/docs/voice/voice-insights
+    Answering Machine Detection        https://www.twilio.com/docs/voice/answering-machine-detection
+    Virtual Agent (Conversational IVR) https://www.twilio.com/docs/voice/virtual-agent
+
+  RELATED PRODUCTS
+    Elastic SIP Trunking               https://www.twilio.com/docs/sip-trunking
+    SIP IP Addresses (firewall)        https://www.twilio.com/docs/sip-trunking/ip-addresses
+    Twilio Functions                   https://www.twilio.com/docs/serverless/functions-assets/functions
+    Twilio Studio                      https://www.twilio.com/docs/studio
+    Twilio TaskRouter                  https://www.twilio.com/docs/taskrouter
+    Voice Conference                   https://www.twilio.com/docs/voice/conference
+    WhatsApp Business Calling          https://www.twilio.com/docs/voice/whatsapp-business-calling
+
+  CONFIGURATION GUIDES (PDFs)
+    Bria iPhone Edition 3.6.3          https://docs-resources.prod.twilio.com/documents/BriaiPhoneEdition3.6.3CfgGuideVer1_1.docx.pdf
+    Bria 4.4.4.0                       https://docs-resources.prod.twilio.com/documents/Bria4.4.4.0CfgGuideVer1_1.docx.pdf
+    GrandStream GXP2130                https://docs-resources.prod.twilio.com/documents/GrandStreamGXP2130CfgGuide.pdf
+    Obihai 1022                        https://docs-resources.prod.twilio.com/documents/Obihai1022CfgGuide.pdf
+    Polycom SoundStation IP 5000       https://docs-resources.prod.twilio.com/documents/PolycomSoundStation5000CfgGuide.pdf
+    Polycom VVX400                     https://docs-resources.prod.twilio.com/documents/PolycomVVX400CfgGuideVer1_0.docx.pdf
+    Polycom VVX500                     https://docs-resources.prod.twilio.com/documents/PolycomVVX500CfgGuideVer1_0.docx.pdf
+    Zoiper iPhone 3.6.1                https://docs-resources.prod.twilio.com/documents/ZoiperiPhone3.6.1CfgGuide.pdf
+    Dolby Conference Phone             https://docs-resources.prod.twilio.com/documents/Registering_a_Dolby_Conference_Phone_to_Twilio_as_a_SIP_Device_January_2018.pdf
+    OBIHAI Phones                      https://docs-resources.prod.twilio.com/documents/Give-Your-OBIHAI-Phone-Telephone-Connectivity.pdf
+    Twilio CA Bundle (TLS root certs)  https://docs-resources.prod.twilio.com/documents/ca-bundle-sip.crt
+
+  TOOLS
+    Twilio CLI Quickstart              https://www.twilio.com/docs/twilio-cli/quickstart
+    Twilio Lookup tool (E.164 helper)  https://www.twilio.com/en-us/trusted-activation/lookup
+    Zoiper softphone                   https://www.zoiper.com/en/voip-softphone/download/current
+    Linphone softphone                 https://www.linphone.org/releases/
+
+  SUPPORT
+    Help Center                        https://help.twilio.com/
+    SDK index                          https://www.twilio.com/docs/libraries
+    Submit a SIP config guide          sip.interconnectionguides@twilio.com
+
+
+================================================================================
+================================================================================
+ PART B  —  SIP REST API REFERENCE
+================================================================================
+================================================================================
+ Source pages (all under https://www.twilio.com/docs/voice/sip/api):
+   - sip-domain-resource
+   - sip-ipaccesscontrollist-resource
+   - sip-ipaddress-resource
+   - sip-credentiallist-resource
+   - sip-credential-resource
+   - sip-credentiallistmapping-resource
+   - sip-ipaccesscontrollistmapping-resource
+   - sip-domain-registration-credentiallistmapping-resource
+   - emergency-calling-api
+================================================================================
+
+
+================================================================================
+ 16. SIP API — RESOURCE MAP & BASE URL
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api
+
+Base URL for ALL SIP REST endpoints:
+  https://api.twilio.com/2010-04-01/Accounts/{AccountSid}/SIP/...
+
+Auth:
+  HTTP Basic auth.  Username = Twilio Account SID (ACxxx…).  Password = Auth Token.
+
+SID prefixes you will see:
+    AC…  Account
+    SD…  SIP Domain
+    AL…  IpAccessControlList   /   IpAccessControlListMapping (same prefix)
+    IP…  IpAddress
+    CL…  CredentialList        /   CredentialListMapping (same prefix)
+    CR…  Credential (a single username inside a CredentialList)
+    BY…  BYOC Trunk (Bring Your Own Carrier)
+    PN…  IncomingPhoneNumber
+    AD…  Address (used for Emergency Calling)
+
+Resource hierarchy
+------------------
+  Account (AC)
+    └── SIP
+         ├── Domains/{SD}
+         │     ├── Auth
+         │     │     ├── Calls
+         │     │     │     ├── CredentialListMappings/{CL}     (sec. 22)
+         │     │     │     └── IpAccessControlListMappings/{AL} (sec. 23)
+         │     │     └── Registrations
+         │     │           └── CredentialListMappings/{CL}     (sec. 24)
+         │     ├── CredentialListMappings/{CL}     (legacy alias of Calls/CredentialListMappings)
+         │     └── IpAccessControlListMappings/{AL}(legacy alias of Calls/IpAccessControlListMappings)
+         ├── CredentialLists/{CL}
+         │     └── Credentials/{CR}
+         └── IpAccessControlLists/{AL}
+               └── IpAddresses/{IP}
+
+What each resource is for (mental model)
+----------------------------------------
+  * SIP Domain  ─ a DNS hostname ending in .sip.twilio.com that Twilio routes
+                  inbound SIP traffic to (configured with a voiceUrl that
+                  returns TwiML).
+  * IpAccessControlList (ACL)
+                ─ a named list of IP addresses (or CIDR blocks) that Twilio
+                  will trust SIP traffic from.
+  * IpAddress   ─ a single entry inside an ACL.
+  * CredentialList
+                ─ a named list of SIP digest username/password pairs.
+  * Credential  ─ a single username+password inside a CredentialList.
+  * Mapping resources
+                ─ glue records that attach an ACL or CredentialList to a
+                  specific SIP Domain.  Mappings under .../Auth/Calls/...
+                  govern inbound INVITE auth, and mappings under
+                  .../Auth/Registrations/... govern SIP REGISTER auth.
+  * Emergency Calling API
+                ─ uses standard Twilio Address and IncomingPhoneNumber
+                  resources to wire up validated emergency dispatch.
+
+The remaining sections give the full CRUD verb-by-verb spec for every resource,
+straight from the official docs.
+
+
+================================================================================
+ 17. SIP DOMAIN RESOURCE
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-domain-resource
+
+A SIP Domain resource describes a custom DNS hostname that can accept SIP
+traffic for your account.  A SIP request to that domain (e.g.
+`sip:alice@example.sip.twilio.com`) routes to Twilio.  Twilio authenticates the
+request and requests TwiML from the Domain's `voice_url`.
+
+A SIP Domain MUST map at least one of:
+  * IpAccessControlList(s)  — via IpAccessControlListMapping  (sec. 23)
+  * CredentialList(s)       — via CredentialListMapping        (sec. 22)
+Otherwise all inbound traffic is blocked.
+
+Resource path
+-------------
+  /2010-04-01/Accounts/{AccountSid}/SIP/Domains
+  /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}
+
+Instance properties (a single SipDomain object)
+-----------------------------------------------
+  sid                          SD…  (unique id)
+  account_sid                  AC…
+  api_version                  "2010-04-01"
+  domain_name                  e.g. "dunder-mifflin.sip.twilio.com"
+                               Must end with `.sip.twilio.com`, contain only
+                               letters, digits and "-".
+  friendly_name                ≤ 64 chars
+  auth_type                    "IP_ACL" | "CREDENTIAL_LIST" | "IP_ACL,CREDENTIAL_LIST"
+  voice_url                    URL Twilio calls when an INVITE arrives
+  voice_method                 GET | POST  (for voice_url)
+  voice_fallback_url           URL on TwiML/HTTP errors
+  voice_fallback_method        GET | POST
+  voice_status_callback_url    URL Twilio calls with call status updates
+  voice_status_callback_method GET | POST
+  sip_registration             bool — allow SIP endpoints to REGISTER
+  emergency_calling_enabled    bool — enable 911/etc. routing
+  secure                       bool — force TLS + SRTP on inbound
+  byoc_trunk_sid               BY… — associate with a BYOC trunk
+  emergency_caller_sid         PN… — caller-ID used for emergency calls
+  date_created / date_updated
+  subresource_uris             links to credential_list_mappings & ip_access_control_list_mappings
+  uri                          self-link
+
+----------------------------------------------------------------
+CREATE  POST  /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
+----------------------------------------------------------------
+Required body params:
+  DomainName                   string — must end with sip.twilio.com
+Optional body params:
+  FriendlyName                 string ≤ 64
+  VoiceUrl                     URL
+  VoiceMethod                  GET | POST
+  VoiceFallbackUrl             URL
+  VoiceFallbackMethod          GET | POST
+  VoiceStatusCallbackUrl       URL
+  VoiceStatusCallbackMethod    GET | POST
+  SipRegistration              true | false
+  EmergencyCallingEnabled      true | false
+  Secure                       true | false   (force TLS + SRTP)
+  ByocTrunkSid                 BY…
+  EmergencyCallerSid           PN…
+
+Node example:
+  const domain = await client.sip.domains.create({ domainName: "domain_name" });
+
+Example response (HTTP 201):
+  {
+    "sid": "SDxxx",
+    "account_sid": "ACxxx",
+    "api_version": "2010-04-01",
+    "auth_type": "IP_ACL",
+    "domain_name": "domain_name",
+    "friendly_name": "Scranton Office",
+    "sip_registration": true,
+    "secure": true,
+    "emergency_calling_enabled": true,
+    "byoc_trunk_sid": "BYxxx",
+    "emergency_caller_sid": "PNxxx",
+    "voice_url": "https://dundermifflin.example.com/twilio/app.php",
+    "voice_method": "POST",
+    "voice_fallback_method": "POST",
+    "voice_status_callback_method": "POST",
+    "subresource_uris": {
+      "credential_list_mappings": "/2010-04-01/Accounts/ACxxx/SIP/Domains/SDxxx/CredentialListMappings.json",
+      "ip_access_control_list_mappings": "/2010-04-01/Accounts/ACxxx/SIP/Domains/SDxxx/IpAccessControlListMappings.json"
+    },
+    "uri": "/2010-04-01/Accounts/ACxxx/SIP/Domains/SDxxx.json",
+    "date_created": "...",
+    "date_updated":"..."
+  }
+
+----------------------------------------------------------------
+FETCH   GET  /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
+----------------------------------------------------------------
+  const domain = await client.sip.domains("SDxxx").fetch();
+
+----------------------------------------------------------------
+LIST    GET  /2010-04-01/Accounts/{AccountSid}/SIP/Domains.json
+----------------------------------------------------------------
+Query params: PageSize (1-1000, default 50), Page, PageToken
+Response wraps domains in a `domains: [...]` array with standard pagination
+fields (first_page_uri, next_page_uri, etc.).
+
+  const domains = await client.sip.domains.list({ limit: 20 });
+
+----------------------------------------------------------------
+UPDATE  POST  /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
+----------------------------------------------------------------
+All body params optional (same set as Create except every field optional,
+plus you may change DomainName).
+  const domain = await client.sip.domains("SDxxx").update({ friendlyName: "new name" });
+
+----------------------------------------------------------------
+DELETE  DELETE /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{Sid}.json
+----------------------------------------------------------------
+HTTP 204 on success.
+  await client.sip.domains("SDxxx").remove();
+
+
+================================================================================
+ 18. SIP IpAccessControlList RESOURCE
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-ipaccesscontrollist-resource
+
+An ACL is a named container of IpAddress entries that Twilio will accept SIP
+traffic from.  Requests from any IP not in a mapped ACL are blocked.
+
+Limits:
+  * up to 1,000 IpAccessControlLists per account
+  * up to 100 IpAddress entries per ACL (CIDR blocks count as one entry)
+  * the same ACL can be mapped to MANY SIP Domains
+  * a new ACL is empty until you POST IpAddress entries to it.
+
+Instance properties
+-------------------
+  sid                  AL…
+  account_sid          AC…
+  friendly_name        ≤ 255 chars
+  date_created / date_updated
+  subresource_uris.ip_addresses
+  uri
+
+Endpoints
+---------
+  POST   /Accounts/{AC}/SIP/IpAccessControlLists.json
+         Body: FriendlyName (required)
+         Example response:
+           {
+             "sid": "ALxxx", "account_sid": "ACxxx",
+             "friendly_name": "friendly_name",
+             "subresource_uris": {
+               "ip_addresses": ".../SIP/IpAccessControlLists/ALxxx/IpAddresses.json"
+             },
+             "uri": ".../SIP/IpAccessControlLists/ALxxx.json",
+             "date_created": "...","date_updated": "..."
+           }
+  GET    /Accounts/{AC}/SIP/IpAccessControlLists/{AL}.json
+  GET    /Accounts/{AC}/SIP/IpAccessControlLists.json
+         Query: PageSize, Page, PageToken
+         Response key: `ip_access_control_lists: [...]`
+  POST   /Accounts/{AC}/SIP/IpAccessControlLists/{AL}.json
+         Body: FriendlyName (required)
+  DELETE /Accounts/{AC}/SIP/IpAccessControlLists/{AL}.json
+
+Node examples
+-------------
+  // Create
+  const acl = await client.sip.ipAccessControlLists.create({ friendlyName: "office" });
+
+  // List
+  const lists = await client.sip.ipAccessControlLists.list({ limit: 20 });
+
+  // Update friendly name
+  await client.sip.ipAccessControlLists("ALxxx").update({ friendlyName: "new" });
+
+  // Delete
+  await client.sip.ipAccessControlLists("ALxxx").remove();
+
+After you create an ACL you must map it to a SIP Domain — see section 23.
+
+
+================================================================================
+ 19. SIP IpAddress RESOURCE
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-ipaddress-resource
+
+A single IPv4 address (or CIDR block) inside an IpAccessControlList.
+IPv6 is NOT supported.
+
+Resource path
+-------------
+  /Accounts/{AC}/SIP/IpAccessControlLists/{AL}/IpAddresses
+  /Accounts/{AC}/SIP/IpAccessControlLists/{AL}/IpAddresses/{Sid}
+
+Instance properties
+-------------------
+  sid                          IP…
+  account_sid                  AC…
+  ip_access_control_list_sid   AL…  (parent)
+  friendly_name                ≤ 255 chars
+  ip_address                   dotted-quad IPv4 (no wildcards)
+  cidr_prefix_length           int (1-32). Default = 32 (entire address).
+  date_created / date_updated
+  uri
+
+Endpoints
+---------
+  POST   /SIP/IpAccessControlLists/{AL}/IpAddresses.json
+         Required: FriendlyName, IpAddress
+         Optional: CidrPrefixLength
+
+  GET    /SIP/IpAccessControlLists/{AL}/IpAddresses/{IP}.json
+  GET    /SIP/IpAccessControlLists/{AL}/IpAddresses.json
+         Query: PageSize (1-1000, default 50), Page, PageToken
+         Response key: `ip_addresses: [...]`
+  POST   /SIP/IpAccessControlLists/{AL}/IpAddresses/{IP}.json
+         Optional body: IpAddress, FriendlyName, CidrPrefixLength
+  DELETE /SIP/IpAccessControlLists/{AL}/IpAddresses/{IP}.json   (204 on success)
+
+Node examples
+-------------
+  // Add an IP to an ACL
+  const ip = await client.sip
+    .ipAccessControlLists("ALxxx")
+    .ipAddresses.create({ friendlyName: "office-edge", ipAddress: "203.0.113.10" });
+
+  // List the IPs in an ACL
+  const ips = await client.sip
+    .ipAccessControlLists("ALxxx").ipAddresses.list({ limit: 20 });
+
+  // Update / replace an entry
+  await client.sip
+    .ipAccessControlLists("ALxxx")
+    .ipAddresses("IPxxx")
+    .update({ ipAddress: "203.0.113.11", cidrPrefixLength: 32 });
+
+  // Remove
+  await client.sip
+    .ipAccessControlLists("ALxxx").ipAddresses("IPxxx").remove();
+
+Example response (single IpAddress):
+  {
+    "sid": "IPxxx",
+    "account_sid": "ACxxx",
+    "ip_access_control_list_sid": "ALxxx",
+    "friendly_name": "office-edge",
+    "ip_address": "192.168.1.1",
+    "cidr_prefix_length": 32,
+    "uri": ".../IpAccessControlLists/ALxxx/IpAddresses/IPxxx.json",
+    "date_created": "...","date_updated":"..."
+  }
+
+
+================================================================================
+ 20. SIP CredentialList RESOURCE
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-credentiallist-resource
+
+A CredentialList holds the SIP digest username/password pairs (Credential
+resources) of the users allowed to reach your SIP Domain via digest auth.
+Only users whose credentials are in a mapped CredentialList are accepted.
+
+Limits:
+  * up to 100 CredentialLists per account
+  * up to 1,000 Credentials per CredentialList
+  * a CredentialList can be mapped to MULTIPLE SIP Domains
+
+Instance properties
+-------------------
+  sid                AC… wait, CL… (CredentialList SID)
+  account_sid        AC…
+  friendly_name      ≤ 64 chars
+  date_created / date_updated
+  subresource_uris.credentials
+  uri
+
+Endpoints
+---------
+  POST   /Accounts/{AC}/SIP/CredentialLists.json
+         Body: FriendlyName (required)
+  GET    /Accounts/{AC}/SIP/CredentialLists/{CL}.json
+  GET    /Accounts/{AC}/SIP/CredentialLists.json
+         Query: PageSize, Page, PageToken
+         Response key: `credential_lists: [...]`
+  POST   /Accounts/{AC}/SIP/CredentialLists/{CL}.json
+         Body: FriendlyName (required)
+  DELETE /Accounts/{AC}/SIP/CredentialLists/{CL}.json
+
+Node examples
+-------------
+  const list  = await client.sip.credentialLists.create({ friendlyName: "office users" });
+  const all   = await client.sip.credentialLists.list({ limit: 20 });
+  await client.sip.credentialLists("CLxxx").update({ friendlyName: "renamed" });
+  await client.sip.credentialLists("CLxxx").remove();
+
+Example response:
+  {
+    "sid": "CLxxx",
+    "account_sid": "ACxxx",
+    "friendly_name": "Low Rises",
+    "subresource_uris": {
+      "credentials": ".../SIP/CredentialLists/CLxxx/Credentials.json"
+    },
+    "uri": ".../SIP/CredentialLists/CLxxx.json",
+    "date_created": "...","date_updated":"..."
+  }
+
+After creating a CredentialList you must map it to a SIP Domain — see sec. 22
+(for inbound INVITE auth) and/or sec. 24 (for SIP REGISTER auth).
+
+
+================================================================================
+ 21. SIP CREDENTIAL RESOURCE  (a single username inside a CredentialList)
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-credential-resource
+
+A Credential is one (username, password) pair stored inside a CredentialList.
+
+Password rules:
+  * minimum 12 characters
+  * at least 1 digit
+  * mixed case
+  * Example accepted: "IWasAtSignal2018"
+  * Twilio stores passwords MD5-hashed per the SIP digest auth spec — not as
+    cleartext.  You cannot retrieve a password via the API, only set/update.
+
+Username rules:
+  * up to 32 characters
+  * sent in response to Twilio's 401/407 challenge after the initial INVITE
+    (digest authentication).
+
+Resource path
+-------------
+  /Accounts/{AC}/SIP/CredentialLists/{CL}/Credentials
+  /Accounts/{AC}/SIP/CredentialLists/{CL}/Credentials/{Sid}
+
+Instance properties
+-------------------
+  sid                  CR…
+  account_sid          AC…
+  credential_list_sid  CL… (parent)
+  username             string (PII; 30-day MTL)
+  date_created / date_updated
+  uri
+
+Endpoints
+---------
+  POST   /SIP/CredentialLists/{CL}/Credentials.json
+         Required: Username, Password
+  GET    /SIP/CredentialLists/{CL}/Credentials/{CR}.json
+  GET    /SIP/CredentialLists/{CL}/Credentials.json
+         Query: PageSize, Page, PageToken
+         Response key: `credentials: [...]`
+  POST   /SIP/CredentialLists/{CL}/Credentials/{CR}.json
+         Body: Password (optional but this is the only thing you can update —
+         used to rotate a user's password).
+  DELETE /SIP/CredentialLists/{CL}/Credentials/{CR}.json
+
+Node examples
+-------------
+  // Create
+  const cred = await client.sip
+    .credentialLists("CLxxx")
+    .credentials.create({ username: "alice", password: "IWasAtSignal2018" });
+
+  // List users in a list
+  const creds = await client.sip
+    .credentialLists("CLxxx").credentials.list({ limit: 20 });
+
+  // Rotate a password
+  await client.sip
+    .credentialLists("CLxxx").credentials("CRxxx")
+    .update({ password: "NewS3curePass!" });
+
+  // Remove a user
+  await client.sip
+    .credentialLists("CLxxx").credentials("CRxxx").remove();
+
+Example response:
+  {
+    "sid": "CRxxx",
+    "account_sid": "ACxxx",
+    "credential_list_sid": "CLxxx",
+    "username": "alice",
+    "uri": ".../SIP/CredentialLists/CLxxx/Credentials/CRxxx.json",
+    "date_created":"...","date_updated":"..."
+  }
+
+
+================================================================================
+ 22. SIP CredentialListMapping RESOURCE   (Calls auth)
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-credentiallistmapping-resource
+
+A CredentialListMapping attaches a CredentialList to a SIP Domain so that
+inbound INVITEs to that Domain are challenged with SIP digest auth.  The
+caller must present a username+password that exists in one of the mapped
+CredentialLists.
+
+NOTE — this resource governs ONLY inbound *call* (INVITE) authentication.
+For inbound *REGISTER* authentication, use the Domain Registration variant in
+section 24.
+
+Resource path (canonical, "Auth/Calls" path)
+--------------------------------------------
+  POST   /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/CredentialListMappings.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/CredentialListMappings/{Sid}.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/CredentialListMappings.json
+  DELETE /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/CredentialListMappings/{Sid}.json
+
+Legacy alias (still works, exposed in the Domain's subresource_uris):
+  /Accounts/{AC}/SIP/Domains/{SD}/CredentialListMappings[.json]
+
+Body params (Create)
+--------------------
+  CredentialListSid   CL…   (required) — the CredentialList you want to attach.
+
+Instance properties
+-------------------
+  sid             CL…   (same as the underlying CredentialList SID)
+  account_sid     AC…
+  friendly_name   inherited from the CredentialList
+  date_created / date_updated
+
+Node examples
+-------------
+  // Attach a CredentialList to a Domain for INVITE auth
+  const mapping = await client.sip
+    .domains("SDxxx")
+    .auth.calls.credentialListMappings
+    .create({ credentialListSid: "CLxxx" });
+
+  // Fetch / List
+  await client.sip.domains("SDxxx").auth.calls.credentialListMappings("CLxxx").fetch();
+  await client.sip.domains("SDxxx").auth.calls.credentialListMappings.list({ limit: 20 });
+
+  // Detach (delete the mapping; the underlying CredentialList survives)
+  await client.sip.domains("SDxxx").auth.calls.credentialListMappings("CLxxx").remove();
+
+Example create response:
+  {
+    "sid": "CLxxx",
+    "account_sid": "ACxxx",
+    "friendly_name": "office users",
+    "date_created":"...","date_updated":"..."
+  }
+
+
+================================================================================
+ 23. SIP IpAccessControlListMapping RESOURCE   (Calls auth)
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-ipaccesscontrollistmapping-resource
+
+An IpAccessControlListMapping attaches an ACL to a SIP Domain so that only
+INVITEs originating from one of the mapped ACL's IPs are accepted.
+
+Resource path (canonical, "Auth/Calls" path)
+--------------------------------------------
+  POST   /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/IpAccessControlListMappings.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/IpAccessControlListMappings/{Sid}.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/IpAccessControlListMappings.json
+  DELETE /Accounts/{AC}/SIP/Domains/{SD}/Auth/Calls/IpAccessControlListMappings/{Sid}.json
+
+Legacy alias:
+  /Accounts/{AC}/SIP/Domains/{SD}/IpAccessControlListMappings[.json]
+
+Body params (Create)
+--------------------
+  IpAccessControlListSid   AL…  (required)
+
+Instance properties
+-------------------
+  sid             AL…   (same as the underlying ACL SID)
+  account_sid     AC…
+  friendly_name   inherited from the ACL
+  date_created / date_updated
+
+Node examples
+-------------
+  // Attach an ACL to a Domain
+  await client.sip
+    .domains("SDxxx")
+    .auth.calls.ipAccessControlListMappings
+    .create({ ipAccessControlListSid: "ALxxx" });
+
+  // Fetch / list
+  await client.sip
+    .domains("SDxxx").auth.calls.ipAccessControlListMappings("ALxxx").fetch();
+  await client.sip
+    .domains("SDxxx").auth.calls.ipAccessControlListMappings.list({ limit: 20 });
+
+  // Detach
+  await client.sip
+    .domains("SDxxx").auth.calls.ipAccessControlListMappings("ALxxx").remove();
+
+Behavior notes
+--------------
+* When an INVITE is received for a SIP Domain, the source IP must appear in at
+  least one mapped ACL — otherwise the request is rejected.
+* You can map multiple ACLs to one Domain; the union of all their IPs is the
+  effective allowlist.
+* Combining ACL mapping AND CredentialList mapping on the same Domain means
+  the caller must satisfy BOTH (correct source IP AND correct digest creds).
+
+
+================================================================================
+ 24. SIP DOMAIN REGISTRATION CredentialListMapping RESOURCE
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/sip-domain-registration-credentiallistmapping-resource
+
+This is the *registration* counterpart of section 22.  It controls which
+CredentialLists Twilio uses to authenticate SIP REGISTER requests sent to a
+Domain that has `sip_registration: true`.
+
+When a SIP endpoint sends REGISTER to the Domain, Twilio responds with a 401
+challenge.  The endpoint replies with a digest-auth username/password — and
+that pair must exist in one of the CredentialLists mapped via this resource
+for the registration to be accepted.
+
+Resource path
+-------------
+  POST   /Accounts/{AC}/SIP/Domains/{SD}/Auth/Registrations/CredentialListMappings.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Registrations/CredentialListMappings/{Sid}.json
+  GET    /Accounts/{AC}/SIP/Domains/{SD}/Auth/Registrations/CredentialListMappings.json
+  DELETE /Accounts/{AC}/SIP/Domains/{SD}/Auth/Registrations/CredentialListMappings/{Sid}.json
+
+Body params (Create)
+--------------------
+  CredentialListSid   CL…   (required)
+
+Instance properties
+-------------------
+  sid             CL…   (same as the underlying CredentialList SID)
+  account_sid     AC…
+  friendly_name   inherited from the CredentialList
+  date_created / date_updated
+
+Node examples
+-------------
+  // Allow this CredentialList to authenticate REGISTERs to this Domain
+  await client.sip
+    .domains("SDxxx")
+    .auth.registrations.credentialListMappings
+    .create({ credentialListSid: "CLxxx" });
+
+  // Fetch / list / delete
+  await client.sip
+    .domains("SDxxx").auth.registrations.credentialListMappings("CLxxx").fetch();
+  await client.sip
+    .domains("SDxxx").auth.registrations.credentialListMappings.list({ limit: 20 });
+  await client.sip
+    .domains("SDxxx").auth.registrations.credentialListMappings("CLxxx").remove();
+
+Summary of the three mapping resources
+--------------------------------------
+  | Use case                | Mapping resource                                  |
+  | ----------------------- | ------------------------------------------------- |
+  | Auth inbound INVITEs    | sec. 22 — Auth/Calls/CredentialListMappings       |
+  |   by username/password  |                                                   |
+  | Auth inbound INVITEs    | sec. 23 — Auth/Calls/IpAccessControlListMappings  |
+  |   by source IP          |                                                   |
+  | Auth inbound REGISTERs  | sec. 24 — Auth/Registrations/CredentialListMappings |
+  |   by username/password  |                                                   |
+
+(There is no "Registrations/IpAccessControlListMappings" — REGISTER auth is
+digest-only.)
+
+
+================================================================================
+ 25. EMERGENCY CALLING FOR SIP INTERFACES — API
+================================================================================
+ Source: https://www.twilio.com/docs/voice/sip/api/emergency-calling-api
+
+Twilio's Emergency Calling API enables routing emergency calls (911 in US,
+similar in CA & UK) to PSAPs.  Emergency addresses are managed per
+IncomingPhoneNumber.  Use this in conjunction with the conceptual section 12
+of this document.
+
+High-level lifecycle
+--------------------
+  Register an Emergency Address on a Twilio Number
+    1) Create + validate a new Address (`EmergencyEnabled=true`).
+    2) Associate the Address with a Twilio number (`emergencyAddressSid`).
+    3) Check the number's `emergency_address_status` is "registered".
+    4) Enable emergency calling on the SIP Domain
+       (`emergencyCallingEnabled: true`).
+
+  Delete an Emergency Address on a Twilio Number
+    1) Set the number's `emergencyAddressSid` to null/empty.
+    2) Confirm status is "unregistered".
+    3) Disable emergency calling on the SIP Domain.
+
+  Change the Emergency Address on a Twilio Number
+    1) Dis-associate the existing Address (set to null).
+    2) Confirm "unregistered".
+    3) Associate the new Address.
+    4) Confirm "registered".
+
+  Add Emergency Caller ID
+    * Set an emergency-enabled Twilio phone number as the Domain's
+      `emergencyCallerSid` so PSAP callbacks ring back the right number.
+
+Actions / endpoints
+-------------------
+
+  ----- Create and validate a new Emergency Address -----
+  POST /2010-04-01/Accounts/{AccountSid}/Addresses
+
+  Required body params (typical US):
+    City, CustomerName, EmergencyEnabled=true, FriendlyName, IsoCountry,
+    PostalCode, Region, Street.
+
+  Node example:
+    const address = await client.addresses.create({
+      city: "San Francisco",
+      customerName: "Twilio",
+      emergencyEnabled: true,
+      friendlyName: "Twilio",
+      isoCountry: "US",
+      postalCode: "94105",
+      region: "CA",
+      street: "645 Harrison St.",
+    });
+
+  Example response (validation failure with a suggested address):
+    <?xml version='1.0' encoding='UTF-8'?>
+    <TwilioResponse>
+      <RestException>
+        <Code>21629</Code>
+        <Message>Failed to validate address. Check the suggested address. |
+          FriendlyName: Twilio, CustomerName: Twilio,
+          Street: 645 HARRISON ST, Locality: SAN FRANCISCO,
+          Region: CA, PostalCode: 94105, IsoCountry: US</Message>
+        <MoreInfo>https://www.twilio.com/docs/errors/21629</MoreInfo>
+        <Status>400</Status>
+      </RestException>
+    </TwilioResponse>
+
+  Successful Address response (excerpt):
+    {
+      "sid": "ADxxx",
+      "account_sid": "ACxxx",
+      "city": "San Francisco",
+      "customer_name": "Twilio",
+      "emergency_enabled": true,
+      "friendly_name": "Twilio",
+      "iso_country": "US",
+      "postal_code": "94105",
+      "region": "CA",
+      "street": "645 Harrison St.",
+      "street_secondary": "Suite 300",
+      "validated": false,
+      "verified": false,
+      "uri": "/2010-04-01/Accounts/ACxxx/Addresses/ADxxx.json"
+    }
+
+  ----- Associate an Emergency Address with a Twilio number -----
+  POST /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{PhoneNumberSid}
+       Body: EmergencyAddressSid=ADxxx
+
+    await client.incomingPhoneNumbers("PNxxx")
+      .update({ emergencyAddressSid: "ADxxx" });
+
+  The number's response includes:
+    "emergency_status": "Active" | "Inactive"
+    "emergency_address_sid": "ADxxx"
+    "emergency_address_status": "registered" | "unregistered" | ...
+
+  ----- Check Emergency Calling Status on a number -----
+  GET /2010-04-01/Accounts/{AccountSid}/IncomingPhoneNumbers/{PhoneNumberSid}
+    await client.incomingPhoneNumbers("PNxxx").fetch();
+
+  ----- Dis-associate (unregister) -----
+  Set emergency_address_sid to null:
+    await client.incomingPhoneNumbers("PNxxx")
+      .update({ emergencyAddressSid: null });
+  curl form (note empty value):
+    curl -X POST \
+      "https://api.twilio.com/2010-04-01/Accounts/ACxxx/IncomingPhoneNumbers/PNxxx.json" \
+      --data-urlencode "EmergencyAddressSid=" \
+      -u ACxxx:your_auth_token
+
+  ----- Delete an Emergency Address -----
+  DELETE /2010-04-01/Accounts/{AccountSid}/Addresses/{AddressSid}
+
+  ----- Enable / Disable Emergency Calling on a SIP Domain -----
+  POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{SipDomainSid}
+       Body: EmergencyCallingEnabled=true   (or false to disable)
+    await client.sip.domains("SDxxx").update({ emergencyCallingEnabled: true });
+    await client.sip.domains("SDxxx").update({ emergencyCallingEnabled: false });
+
+  ----- Add Emergency Caller ID -----
+  POST /2010-04-01/Accounts/{AccountSid}/SIP/Domains/{SipDomainSid}
+       Body: EmergencyCallerSid=PNxxx
+    await client.sip.domains("SDxxx").update({ emergencyCallerSid: "PNxxx" });
+
+Phone numbers themselves are managed via the standard IncomingPhoneNumber
+REST resource — see https://www.twilio.com/docs/phone-numbers/api/incomingphonenumber-resource
+
+
+================================================================================
+ 26. END-TO-END "WIRE UP A SIP DOMAIN" RECIPE
+================================================================================
+A concise distillation of sections 17-25 so you can stand up a working SIP
+endpoint with one script.  All requests use HTTP Basic auth
+(username = AccountSid, password = AuthToken).
+
+Goal: accept inbound INVITEs at sip:alice@myorg.sip.twilio.com,
+      challenge with digest auth, and have Twilio fetch TwiML from your app.
+
+Pseudo-Node script:
+
+  const twilio = require("twilio");
+  const client = twilio(process.env.TWILIO_ACCOUNT_SID,
+                        process.env.TWILIO_AUTH_TOKEN);
+
+  // 1. Create the SIP Domain
+  const domain = await client.sip.domains.create({
+    domainName:      "myorg.sip.twilio.com",
+    friendlyName:    "MyOrg Inbound",
+    voiceUrl:        "https://api.example.com/twilio/sip-inbound",
+    voiceMethod:     "POST",
+    voiceFallbackUrl:"https://api.example.com/twilio/sip-fallback",
+    sipRegistration: true,
+    secure:          true,                 // force TLS + SRTP
+    emergencyCallingEnabled: false,
+  });
+  console.log("domain.sid =", domain.sid); // SDxxx
+
+  // 2a. Create a CredentialList + Credentials for INVITE auth
+  const list = await client.sip.credentialLists.create({
+    friendlyName: "Inbound INVITE users",
+  });
+  await client.sip.credentialLists(list.sid).credentials.create({
+    username: "alice",
+    password: "IWasAtSignal2018",         // ≥12 chars, mixed case, digit
+  });
+
+  // 2b. Map the CredentialList to the Domain for INVITE auth
+  await client.sip.domains(domain.sid)
+    .auth.calls.credentialListMappings.create({
+      credentialListSid: list.sid,
+    });
+
+  // 3a. (Optional) Restrict by source IP too — create an ACL + IP
+  const acl = await client.sip.ipAccessControlLists.create({
+    friendlyName: "Edge SBCs",
+  });
+  await client.sip.ipAccessControlLists(acl.sid)
+    .ipAddresses.create({
+      friendlyName: "sbc-eu",
+      ipAddress:    "203.0.113.10",
+      cidrPrefixLength: 32,
+    });
+  await client.sip.domains(domain.sid)
+    .auth.calls.ipAccessControlListMappings.create({
+      ipAccessControlListSid: acl.sid,
+    });
+
+  // 4. (Optional) Allow SIP REGISTER from those same users
+  await client.sip.domains(domain.sid)
+    .auth.registrations.credentialListMappings.create({
+      credentialListSid: list.sid,
+    });
+
+  // 5. (Optional) Enable emergency calling on this Domain
+  //    — first create + validate a postal Address (see sec. 25)
+  //    — then associate it with an IncomingPhoneNumber
+  //    — then:
+  //    await client.sip.domains(domain.sid).update({
+  //      emergencyCallingEnabled: true,
+  //      emergencyCallerSid:      "PNxxx",
+  //    });
+
+  // 6. Done — point your softphone at:
+  //    SIP URI:   sip:alice@myorg.sip.twilio.com
+  //    Username:  alice
+  //    Password:  IWasAtSignal2018
+  //    Transport: TLS (since secure=true)
+
+
+Tear-down order (reverse the above):
+  1. Detach Registration CredentialListMapping
+  2. Detach Calls IpAccessControlListMapping
+  3. Detach Calls CredentialListMapping
+  4. Delete IpAddresses, then the ACL
+  5. Delete Credentials, then the CredentialList
+  6. Delete the SIP Domain
+
+
+================================================================================
+ END OF DOCUMENT
+================================================================================

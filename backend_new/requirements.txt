@@ -1,0 +1,49 @@
+# ===========================
+# QuickHyr Voice Backend
+# ===========================
+
+# Flask Framework
+Flask>=2.3.0
+Flask-SQLAlchemy>=3.0.0
+Flask-Sock>=0.6.0
+Flask-CORS>=4.0.0
+
+# Database
+SQLAlchemy>=2.0.0
+alembic>=1.11.0  # For migrations
+
+# Plivo Voice API
+plivo>=4.25.0
+
+# Speech-to-Text (Deepgram)
+deepgram-sdk>=3.0.0
+websockets>=11.0
+
+# Text-to-Speech (Google Cloud)
+google-cloud-texttospeech>=2.14.0
+
+# Translation (Google Cloud)
+google-cloud-translate>=3.11.0
+
+# AI Client (OpenAI-compatible)
+openai>=1.0.0
+httpx>=0.24.0
+
+# Audio Processing
+pydub>=0.25.1
+audioop-lts>=0.2.0  # For Python 3.13+ compatibility
+
+# Utilities
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Production Server
+gunicorn>=21.0.0
+gevent>=23.0.0
+
+# Monitoring (optional)
+prometheus-client>=0.17.0
+
+# Development
+pytest>=7.4.0
+pytest-flask>=1.2.0

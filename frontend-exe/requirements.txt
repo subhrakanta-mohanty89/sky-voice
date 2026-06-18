@@ -1,0 +1,18 @@
+# Sky Voice AI desktop wrapper — Python deps
+#
+# Cross-platform: pywebview pulls the right native deps for each OS
+# automatically (pyobjc on macOS, pythonnet/winforms on Windows, GTK on
+# Linux). pinning ranges intentionally loose so updates can flow in.
+
+pywebview>=5.3,<6
+pyinstaller>=6.10,<7
+
+# macOS — make sure pyobjc bridge is present.
+pyobjc-core>=10.2; sys_platform == 'darwin'
+pyobjc-framework-Cocoa>=10.2; sys_platform == 'darwin'
+pyobjc-framework-WebKit>=10.2; sys_platform == 'darwin'
+
+# Windows — Edge WebView2 backend.
+pywebview-edgechromium-mta-runtime; sys_platform == 'win32' and python_version < '0'
+# (the line above is intentionally inactive — pywebview already declares
+# the right WebView2 deps when imported on Windows. Kept as a marker.)

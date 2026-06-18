@@ -1,0 +1,15 @@
+.venv/
+build/
+dist/
+__pycache__/
+*.pyc
+*.pyo
+*.spec~
+*.log
+
+# NOTE: web/ (the built React bundle) and assets/icon.* ARE committed on
+# purpose so this wrapper is a self-contained, CI-buildable unit — the
+# GitHub Actions workflow can produce the Windows .exe / macOS .app without
+# needing Node or the (private) frontend source. Refresh web/ + the icons
+# locally with ./build.sh (macOS/Linux) or build.bat (Windows) whenever the
+# frontend changes, then commit the result.

@@ -1,0 +1,82 @@
+name: Build desktop app
+
+# Produces shareable native builds of the Sky Voice AI operator console:
+#   * Windows  ->  SkyVoiceAI-windows.zip  (contains SkyVoiceAI.exe + deps)
+#   * macOS    ->  SkyVoiceAI-macos.zip    (contains "Sky Voice AI.app")
+#
+# How to get the Windows .exe (you're on a Mac and PyInstaller can't
+# cross-compile):
+#   1. Push this `frontend-exe` folder to a GitHub repo (it is self-contained
+#      — the built React bundle lives in web/, committed alongside the code).
+#   2. This workflow runs automatically on every push to main, or trigger it
+#      by hand from the repo's Actions tab ("Run workflow").
+#   3. Open the finished run and download the `SkyVoiceAI-windows` artifact.
+#      Unzip it and share the SkyVoiceAI/ folder — recipients double-click
+#      SkyVoiceAI.exe (Windows 10/11 ship the Edge WebView2 runtime it needs).
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            label: Windows (.exe)
+            artifact: SkyVoiceAI-windows
+          - os: macos-latest
+            label: macOS (.app)
+            artifact: SkyVoiceAI-macos
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Verify the React bundle is present
+        shell: bash
+        run: |
+          if [ ! -f web/index.html ]; then
+            echo "::error::web/index.html is missing. Run ./build.sh (macOS/Linux) or build.bat (Windows) locally to refresh web/ from ../frontend, then commit web/." >&2
+            exit 1
+          fi
+          echo "Bundled web/ OK ($(ls web/assets/*.js 2>/dev/null | head -1))"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Build with PyInstaller
+        run: pyinstaller --noconfirm --log-level=WARN SkyVoiceAI.spec
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: Compress-Archive -Path "dist/SkyVoiceAI/*" -DestinationPath "SkyVoiceAI-windows.zip" -Force
+
+      - name: Package (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: cd dist && zip -ry "../SkyVoiceAI-macos.zip" "Sky Voice AI.app"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: SkyVoiceAI-*.zip
+          if-no-files-found: error
+          retention-days: 30
