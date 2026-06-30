@@ -1,0 +1,18 @@
+# Sky AI customer-support backend (Twilio)
+Flask==3.0.3
+flask-cors==4.0.1
+flask-sock==0.7.0
+python-dotenv==1.0.1
+twilio==9.3.7
+PyJWT==2.9.0
+gunicorn==22.0.0
+psycopg[binary,pool]==3.3.4
+SQLAlchemy==2.0.50
+
+# Sara — AI voice agent
+deepgram-sdk==3.7.4         # Deepgram STT (nova-3) + Aura TTS
+openai>=1.59.0,<2           # LLM for off-script Q&A (optional — Sara
+                            # works script-only without an API key).
+                            # >=1.59 needed for httpx 0.28 compatibility.
+pypdf==4.3.1                # Parse the K&K Legal knowledge book PDF
+requests==2.32.3            # HTTP client for Deepgram Aura TTS + Mailgun

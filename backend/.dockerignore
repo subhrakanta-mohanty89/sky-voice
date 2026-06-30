@@ -1,0 +1,51 @@
+# Keep build context tiny so docker build is fast and reproducible.
+# Everything here is excluded from `COPY . /app` in the Dockerfile.
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtualenvs
+.venv/
+venv/
+env/
+
+# Secrets — Cloud Run injects env via service config / Secret Manager
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+quickhyr-*.json
+service-account*.json
+
+# Editor / OS junk
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*.swo
+
+# VCS
+.git/
+.gitignore
+
+# Docker meta
+Dockerfile
+.dockerignore
+
+# Local SQLite / dumps / logs
+*.sqlite
+*.db
+*.log
+instance/

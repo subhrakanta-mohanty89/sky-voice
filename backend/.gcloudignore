@@ -1,0 +1,40 @@
+# Keep the Cloud Build source upload small and secret-free.
+# (Used by `gcloud run deploy --source`. The image build itself is
+#  additionally constrained by .dockerignore.)
+
+# VCS
+.git/
+.gitignore
+
+# Python caches / build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# Virtualenvs (the image rebuilds deps from requirements.txt)
+.venv/
+venv/
+env/
+
+# Secrets — Cloud Run injects config via env / Secret Manager
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+quickhyr-*.json
+service-account*.json
+*-service-account.json
+gcp-key*.json
+
+# Local instance data / SQLite
+instance/
+*.db
+*.sqlite3

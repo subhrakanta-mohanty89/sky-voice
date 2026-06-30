@@ -1,0 +1,49 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Environment (NEVER commit)
+.env
+.env.local
+.env.*.local
+
+# GCP / service-account credentials (CRITICAL — never commit)
+quickhyr-*.json
+service-account*.json
+*-service-account.json
+gcp-key*.json
+
+# Other secrets / certs
+*.pem
+*.key
+*.p12
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+logs/
+
+# Instance / runtime artifacts
+instance/
+*.db
+*.sqlite
+
+# Test coverage
+.coverage
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS
+.DS_Store
+Thumbs.db
